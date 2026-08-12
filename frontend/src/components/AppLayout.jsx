@@ -219,21 +219,75 @@ export default function AppLayout({ children }) {
                     </div>
                 </div>
 
-                <nav className="md:hidden border-t border-[#DCD7CB] overflow-x-auto">
-                    <div className="flex gap-1 px-2 py-2 min-w-max">
-                        {navItems.map((n) => (
-                            <NavLink
-                                key={n.to} to={n.to} data-testid={`${n.testid}-mobile`}
-                                className={({ isActive }) =>
-                                    `px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 ${isActive ? "bg-[#2D4C3B] text-[#F5F4F0]" : "text-[#1C1F1D] bg-[#E8E5DC]"
-                                    }`
-                                }
-                            >
-                                <n.icon className="w-3.5 h-3.5" />
-                                {n.label}
-                            </NavLink>
-                        ))}
+                <nav className="md:hidden border-t border-[#DCD7CB] relative">
+                    {/* Horizontal menu */}
+                    <div className="overflow-x-auto">
+                        <div className="flex gap-1 px-2 py-2 min-w-max">
+                            {navItems.map((n) => {
+                                const isParentActive = n.children?.some(
+                                    (child) =>
+                                        location.pathname === child.to ||
+                                        location.pathname.startsWith(`${child.to}/`)
+                                );
+
+                                return (
+                                    <button
+                                        key={n.label}
+                                        type="button"
+                                        onClick={() => {
+                                            if (n.children?.length) {
+                                                setOpenMenu(
+                                                    openMenu === n.label
+                                                        ? null
+                                                        : n.label
+                                                );
+                                            }
+                                        }}
+                                        className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 ${isParentActive || openMenu === n.label
+                                                ? "bg-[#2D4C3B] text-[#F5F4F0]"
+                                                : "text-[#1C1F1D] bg-[#E8E5DC]"
+                                            }`}
+                                    >
+                                        <n.icon className="w-3.5 h-3.5" />
+
+                                        {n.label}
+
+                                        {n.children?.length > 0 && (
+                                            <span className="text-[10px] ml-1">
+                                                {openMenu === n.label ? "▲" : "▼"}
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
+
+                    {/* Full-width dropdown */}
+                    {openMenu && (
+                        <div className="w-full bg-white border-t border-[#DCD7CB] shadow-lg p-2 z-[9999]">
+                            <div className="flex flex-col gap-1">
+                                {navItems
+                                    .find((n) => n.label === openMenu)
+                                    ?.children?.map((item) => (
+                                        <NavLink
+                                            key={item.to}
+                                            to={item.to}
+                                            onClick={() => setOpenMenu(null)}
+                                            className={({ isActive }) =>
+                                                `w-full px-3 py-2.5 rounded-md text-sm font-semibold flex items-center gap-2 ${isActive
+                                                    ? "bg-[#2D4C3B] text-[#F5F4F0]"
+                                                    : "text-[#1C1F1D] hover:bg-[#E8E5DC]"
+                                                }`
+                                            }
+                                        >
+                                            <item.icon className="w-4 h-4" />
+                                            {item.label}
+                                        </NavLink>
+                                    ))}
+                            </div>
+                        </div>
+                    )}
                 </nav>
             </header>
 
