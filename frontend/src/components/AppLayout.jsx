@@ -118,7 +118,7 @@ export default function AppLayout({ children }) {
               <Leaf className="w-5 h-5" />
             </div>
             <div className="leading-tight">
-              <div className="font-display font-black text-[#1C1F1D] text-base">VGF</div>
+              <div className="font-display font-black text-[#1C1F1D] text-base">SJSA</div>
               <div className="text-[10px] tracking-[0.18em] uppercase text-[#8C938F]">
                 Family Manager
               </div>

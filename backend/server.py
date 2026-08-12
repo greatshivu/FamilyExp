@@ -392,23 +392,6 @@ async def seed_defaults():
     await audit_db.audits.create_index("resource_type")
     await audit_db.audits.create_index("resource_id")
     await audit_db.audits.create_index("user_id")
-
-
-async def create_audit(user: dict, action: str, resource_type: str, resource_id: str, amount: float, date: str, category: str = None):
-    doc = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["id"],
-        "user_name": user["name"],
-        "action": action,
-        "resource_type": resource_type,
-        "resource_id": resource_id,
-        "amount": amount,
-        "category": category,
-        "date": date,
-        "created_at": utc_now_iso()
-    }
-    await audit_db.audits.insert_one(doc)
-
     # Admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@farm.com").lower()
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -453,6 +436,20 @@ async def create_audit(user: dict, action: str, resource_type: str, resource_id:
             upsert=True,
         )
 
+async def create_audit(user: dict, action: str, resource_type: str, resource_id: str, amount: float, date: str, category: str = None):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "action": action,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "amount": amount,
+        "category": category,
+        "date": date,
+        "created_at": utc_now_iso()
+    }
+    await audit_db.audits.insert_one(doc)
 
 @app.on_event("startup")
 async def on_startup():
