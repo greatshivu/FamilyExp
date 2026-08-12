@@ -58,9 +58,9 @@ const SavingsPage = () => {
         api.get("/accounts"),
         api.get("/reports/monthly-savings"),
       ]);
-      setSavings(savingsRes);
-      setAccounts(accountsRes);
-      setMonthlySavings(monthlySavingsRes);
+      setSavings(savingsRes.data);
+      setAccounts(accountsRes.data);
+      setMonthlySavings(monthlySavingsRes.data);
     } catch (err) {
       toast.error(formatApiError(err));
     } finally {

@@ -54,8 +54,8 @@ const AccountsPage = () => {
         api.get("/accounts"),
         api.get("/reports/accounts-summary"),
       ]);
-      setAccounts(accountsRes);
-      setSummary(summaryRes);
+      setAccounts(accountsRes.data);
+      setSummary(summaryRes.data);
     } catch (err) {
       toast.error(formatApiError(err));
     } finally {
