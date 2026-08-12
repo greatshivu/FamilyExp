@@ -177,9 +177,9 @@ export default function AppLayout({ children }) {
                                     </div>
 
                                     {group.children && openMenu === group.label && (
-                                        <div className="absolute left-0 top-full mt-[0px] hidden group-hover:block bg-white shadow-lg rounded-md p-2 z-50">
+                                        <div className="absolute left-0 top-full mt-[0px] bg-white shadow-lg rounded-md p-2 z-50">
                                             {group.children.map((item) => (
-                                                <NavLink
+                                                <NavLink onClick={() => setOpenMenu(null)}
                                                     key={`${group.label}-${item.to}`}
                                                     to={item.to}
                                                     data-testid={item.testid}
