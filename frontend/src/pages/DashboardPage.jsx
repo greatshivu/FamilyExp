@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, inr } from "@/lib/api";
+import { useNavigate } from "react-router-dom";
 import {
   ResponsiveContainer,
   BarChart,
@@ -10,7 +11,8 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, Scale } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, Scale, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function Kpi({ label, value, icon: Icon, tone = "default", testid }) {
   const toneClasses =
@@ -39,18 +41,25 @@ function Kpi({ label, value, icon: Icon, tone = "default", testid }) {
 
 export default function DashboardPage() {
   const [summary, setSummary] = useState(null);
+  const [monthlySavings, setMonthlySavings] = useState(null);
+  const [accountsSummary, setAccountsSummary] = useState(null);
   const [monthly, setMonthly] = useState([]);
   const [recent, setRecent] = useState([]);
+  const navigate = useNavigate();
   const year = new Date().getFullYear();
 
   useEffect(() => {
     (async () => {
-      const [s, m, t] = await Promise.all([
+      const [s, m, t, ms, as] = await Promise.all([
         api.get("/reports/summary"),
         api.get(`/reports/monthly?year=${year}`),
         api.get("/reports/transactions"),
+        api.get("/reports/monthly-savings"),
+        api.get("/reports/accounts-summary"),
       ]);
       setSummary(s.data);
+      setMonthlySavings(ms);
+      setAccountsSummary(as);
       setMonthly(
         m.data.map((row) => ({
           ...row,
@@ -107,6 +116,45 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Monthly Savings Section */}
+      {monthlySavings && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white border border-[#DCD7CB] rounded-md shadow-sm p-6 sm:p-8 hover:border-[#8C938F] transition-colors">
+            <div className="text-xs tracking-[0.2em] uppercase font-bold text-[#8C938F] mb-2">
+              Monthly Income
+            </div>
+            <div className="text-2xl sm:text-3xl tracking-tight font-bold text-[#3F6450]">
+              {inr(monthlySavings.total_income)}
+            </div>
+          </div>
+          <div className="bg-white border border-[#DCD7CB] rounded-md shadow-sm p-6 sm:p-8 hover:border-[#8C938F] transition-colors">
+            <div className="text-xs tracking-[0.2em] uppercase font-bold text-[#8C938F] mb-2">
+              Monthly Expense
+            </div>
+            <div className="text-2xl sm:text-3xl tracking-tight font-bold text-[#C35A42]">
+              {inr(monthlySavings.total_expense)}
+            </div>
+          </div>
+          <div className="bg-white border border-[#DCD7CB] rounded-md shadow-sm p-6 sm:p-8 hover:border-[#8C938F] transition-colors">
+            <div className="text-xs tracking-[0.2em] uppercase font-bold text-[#8C938F] mb-2">
+              Monthly Savings
+            </div>
+            <div className="text-2xl sm:text-3xl tracking-tight font-bold text-[#2D4C3B]">
+              {inr(monthlySavings.monthly_savings)}
+            </div>
+          </div>
+          <div className="bg-white border border-[#DCD7CB] rounded-md shadow-sm p-6 sm:p-8 hover:border-[#8C938F] transition-colors">
+            <div className="text-xs tracking-[0.2em] uppercase font-bold text-[#8C938F] mb-2">
+              Saved to Accounts
+            </div>
+            <div className="text-2xl sm:text-3xl tracking-tight font-bold text-[#2D4C3B]">
+              {inr(monthlySavings.total_saved_to_accounts)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Accounts Summary and Recent Transactions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white border border-[#DCD7CB] rounded-md p-6">
           <div className="flex items-center justify-between mb-4">
@@ -141,39 +189,63 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-[#DCD7CB] rounded-md p-6">
-          <div className="text-[11px] tracking-[0.2em] uppercase font-bold text-[#8C938F] mb-1">
-            Latest activity
-          </div>
-          <h3 className="font-display text-xl font-bold text-[#2D4C3B] mb-4">Recent entries</h3>
-          <div className="space-y-3" data-testid="recent-list">
-            {recent.length === 0 && (
-              <div className="text-sm text-[#5C635F]">No transactions yet.</div>
-            )}
-            {recent.map((t) => {
-              const sign = t.kind === "expense" ? "-" : "+";
-              const color =
-                t.kind === "expense" ? "text-[#C35A42]" : "text-[#3F6450]";
-              const label =
-                t.kind === "investment" ? `Investment · ${t.partner_name}` : t.category;
-              return (
-                <div
-                  key={`${t.kind}-${t.id}`}
-                  className="flex items-center justify-between gap-3 fade-up"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-[#1C1F1D] truncate">{label}</div>
-                    <div className="text-xs text-[#8C938F] uppercase tracking-wider">
-                      {t.kind} · {t.date}
+        <div className="space-y-6">
+          {/* Bank Accounts Summary */}
+          {accountsSummary && (
+            <div className="bg-white border border-[#DCD7CB] rounded-md p-6">
+              <div className="text-[11px] tracking-[0.2em] uppercase font-bold text-[#8C938F] mb-1">
+                Bank Accounts
+              </div>
+              <h3 className="font-display text-xl font-bold text-[#2D4C3B] mb-4">
+                {inr(accountsSummary.total_balance)}
+              </h3>
+              <p className="text-sm text-[#5C635F] mb-4">
+                {accountsSummary.account_count} account{accountsSummary.account_count !== 1 ? 's' : ''} total
+              </p>
+              <Button
+                onClick={() => navigate("/accounts")}
+                className="w-full bg-[#2D4C3B] text-[#F5F4F0] hover:bg-[#1E3629] flex items-center justify-center gap-2"
+              >
+                Manage Accounts <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Recent Activity */}
+          <div className="bg-white border border-[#DCD7CB] rounded-md p-6">
+            <div className="text-[11px] tracking-[0.2em] uppercase font-bold text-[#8C938F] mb-1">
+              Latest activity
+            </div>
+            <h3 className="font-display text-xl font-bold text-[#2D4C3B] mb-4">Recent entries</h3>
+            <div className="space-y-3" data-testid="recent-list">
+              {recent.length === 0 && (
+                <div className="text-sm text-[#5C635F]">No transactions yet.</div>
+              )}
+              {recent.map((t) => {
+                const sign = t.kind === "expense" ? "-" : "+";
+                const color =
+                  t.kind === "expense" ? "text-[#C35A42]" : "text-[#3F6450]";
+                const label =
+                  t.kind === "investment" ? `Investment · ${t.partner_name}` : t.category;
+                return (
+                  <div
+                    key={`${t.kind}-${t.id}`}
+                    className="flex items-center justify-between gap-3 fade-up"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-[#1C1F1D] truncate">{label}</div>
+                      <div className="text-xs text-[#8C938F] uppercase tracking-wider">
+                        {t.kind} · {t.date}
+                      </div>
+                    </div>
+                    <div className={`text-sm font-bold tabular ${color}`}>
+                      {sign}
+                      {inr(t.amount)}
                     </div>
                   </div>
-                  <div className={`text-sm font-bold tabular ${color}`}>
-                    {sign}
-                    {inr(t.amount)}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

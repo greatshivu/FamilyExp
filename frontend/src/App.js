@@ -15,6 +15,8 @@ import ReportsPage from "@/pages/ReportsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import AdminAccountsPage from "@/pages/AdminAccountsPage";
 import AdminDeletionsPage from "@/pages/AdminDeletionsPage";
+import AccountsPage from "@/pages/AccountsPage";
+import SavingsPage from "@/pages/SavingsPage";
 import AppLayout from "@/components/AppLayout";
 import AuditLogs from "@/pages/AuditLogs";
 import GlobalLoader from "@/components/GlobalLoader";
@@ -53,6 +55,8 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/dashboard" element={<Protected><DashboardPage /></Protected>} />
           <Route path="/transactions" element={<Protected><TransactionsPage /></Protected>} />
+          <Route path="/accounts" element={<Protected><AccountsPage /></Protected>} />
+          <Route path="/savings" element={<Protected><SavingsPage /></Protected>} />
           <Route path="/notes" element={<Protected><NotesPage /></Protected>} />
           <Route path="/farm-updates" element={<Protected><FarmUpdatesPage /></Protected>} />
           <Route path="/categories" element={<Protected><CategoriesPage /></Protected>} />

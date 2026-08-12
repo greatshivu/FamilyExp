@@ -353,6 +353,53 @@ class AuditLog(BaseModel):
     created_at: str
 
 
+class BankAccountIn(BaseModel):
+    name: str
+    account_type: Literal["bank", "cash", "credit_card", "wallet", "investment"]
+    balance: float
+    opening_balance: Optional[float] = None
+
+
+class BankAccount(BaseModel):
+    id: str
+    name: str
+    account_type: Literal["bank", "cash", "credit_card", "wallet", "investment"]
+    balance: float
+    opening_balance: Optional[float] = None
+    created_by: str
+    created_by_name: str
+    created_at: str
+
+
+class SavingsIn(BaseModel):
+    account_id: str
+    amount: float
+    date: str
+    note: Optional[str] = None
+    source: Literal["manual", "income", "expense"] = "manual"
+
+
+class Savings(BaseModel):
+    id: str
+    account_id: str
+    account_name: str
+    amount: float
+    date: str
+    note: Optional[str] = None
+    source: Literal["manual", "income", "expense"]
+    created_by: str
+    created_by_name: str
+    created_at: str
+
+
+class MonthlySavings(BaseModel):
+    month: str  # YYYY-MM
+    total_income: float
+    total_expense: float
+    monthly_savings: float
+    total_saved_to_accounts: float
+
+
 # ---------------- Seed ----------------
 DEFAULT_CATEGORIES = [
     ("Salary", "income"),
@@ -384,6 +431,9 @@ async def seed_defaults():
     await db.incomes.create_index("date")
     await db.expenses.create_index("date")
     await db.investments.create_index("partner_id")
+    await db.bank_accounts.create_index("created_by")
+    await db.savings.create_index("account_id")
+    await db.savings.create_index("date")
     await db.deletion_requests.create_index("status")
     await db.deletion_requests.create_index([("resource_type", 1), ("resource_id", 1)])
     await db.password_reset_tokens.create_index("token", unique=True)
@@ -1344,6 +1394,203 @@ async def create_farm_update(payload: FarmUpdateIn, user: dict = Depends(get_cur
 @api.get("/")
 async def root():
     return {"app": "Family Exponse", "status": "ok"}
+
+
+# ---------------- Bank Accounts ----------------
+@api.get("/accounts", response_model=List[BankAccount])
+async def list_bank_accounts(_: dict = Depends(get_current_user)):
+    rows = await db.bank_accounts.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return rows
+
+
+@api.post("/accounts", response_model=BankAccount)
+async def create_bank_account(payload: BankAccountIn, user: dict = Depends(get_current_user)):
+    doc = {
+        "id": str(uuid.uuid4()),
+        **payload.model_dump(),
+        "created_by": user["id"],
+        "created_by_name": user["name"],
+        "created_at": utc_now_iso(),
+    }
+    await db.bank_accounts.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/accounts/{account_id}", response_model=BankAccount)
+async def update_bank_account(account_id: str, payload: BankAccountIn, user: dict = Depends(get_current_user)):
+    existing = await db.bank_accounts.find_one({"id": account_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if user["role"] != "admin" and existing["created_by"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to edit this account")
+    
+    update_data = payload.model_dump()
+    await db.bank_accounts.update_one({"id": account_id}, {"$set": update_data})
+    updated = await db.bank_accounts.find_one({"id": account_id}, {"_id": 0})
+    return updated
+
+
+@api.delete("/accounts/{account_id}")
+async def delete_bank_account(account_id: str, user: dict = Depends(get_admin_user)):
+    existing = await db.bank_accounts.find_one({"id": account_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+    await db.bank_accounts.delete_one({"id": account_id})
+    await db.savings.delete_many({"account_id": account_id})
+    return {"ok": True}
+
+
+# ---------------- Savings ----------------
+@api.get("/savings", response_model=List[Savings])
+async def list_savings(_: dict = Depends(get_current_user)):
+    rows = await db.savings.find({}, {"_id": 0}).sort("date", -1).to_list(2000)
+    return rows
+
+
+@api.post("/savings", response_model=Savings)
+async def create_savings(payload: SavingsIn, user: dict = Depends(get_current_user)):
+    account = await db.bank_accounts.find_one({"id": payload.account_id})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    doc = {
+        "id": str(uuid.uuid4()),
+        "account_id": payload.account_id,
+        "account_name": account["name"],
+        "amount": payload.amount,
+        "date": payload.date,
+        "note": payload.note,
+        "source": payload.source,
+        "created_by": user["id"],
+        "created_by_name": user["name"],
+        "created_at": utc_now_iso(),
+    }
+    await db.savings.insert_one(doc)
+    
+    # Update account balance
+    await db.bank_accounts.update_one(
+        {"id": payload.account_id},
+        {"$inc": {"balance": payload.amount}}
+    )
+    
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/savings/{savings_id}", response_model=Savings)
+async def update_savings(savings_id: str, payload: SavingsIn, user: dict = Depends(get_current_user)):
+    existing = await db.savings.find_one({"id": savings_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Savings entry not found")
+    if user["role"] != "admin" and existing["created_by"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to edit this entry")
+    
+    account = await db.bank_accounts.find_one({"id": payload.account_id})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Adjust account balance for difference
+    old_amount = existing["amount"]
+    amount_diff = payload.amount - old_amount
+    
+    update_data = {
+        **payload.model_dump(),
+        "account_name": account["name"],
+    }
+    await db.savings.update_one({"id": savings_id}, {"$set": update_data})
+    
+    # Update account balance
+    if amount_diff != 0:
+        await db.bank_accounts.update_one(
+            {"id": payload.account_id},
+            {"$inc": {"balance": amount_diff}}
+        )
+    
+    updated = await db.savings.find_one({"id": savings_id}, {"_id": 0})
+    return updated
+
+
+@api.delete("/savings/{savings_id}")
+async def delete_savings(savings_id: str, user: dict = Depends(get_admin_user)):
+    existing = await db.savings.find_one({"id": savings_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Savings entry not found")
+    
+    # Revert account balance
+    await db.bank_accounts.update_one(
+        {"id": existing["account_id"]},
+        {"$inc": {"balance": -existing["amount"]}}
+    )
+    
+    await db.savings.delete_one({"id": savings_id})
+    return {"ok": True}
+
+
+# Helper function to get account name
+async def _account_name(account_id: str) -> Optional[str]:
+    account = await db.bank_accounts.find_one({"id": account_id})
+    return account.get("name") if account else None
+
+
+# Helper function to calculate monthly savings
+async def _calculate_monthly_savings(year: int, month: int) -> MonthlySavings:
+    from datetime import datetime as dt
+    month_str = f"{year:04d}-{month:02d}"
+    
+    # Calculate total income for the month
+    incomes = await db.incomes.find(
+        {"date": {"$regex": f"^{month_str}"}}
+    ).to_list(None)
+    total_income = sum(inc["amount"] for inc in incomes)
+    
+    # Calculate total expenses for the month
+    expenses = await db.expenses.find(
+        {"date": {"$regex": f"^{month_str}"}}
+    ).to_list(None)
+    total_expense = sum(exp["amount"] for exp in expenses)
+    
+    # Calculate total saved to accounts for the month
+    savings = await db.savings.find(
+        {"date": {"$regex": f"^{month_str}"}}
+    ).to_list(None)
+    total_saved_to_accounts = sum(s["amount"] for s in savings)
+    
+    monthly_savings_amount = total_income - total_expense
+    
+    return MonthlySavings(
+        month=month_str,
+        total_income=total_income,
+        total_expense=total_expense,
+        monthly_savings=monthly_savings_amount,
+        total_saved_to_accounts=total_saved_to_accounts
+    )
+
+
+@api.get("/reports/monthly-savings", response_model=MonthlySavings)
+async def get_monthly_savings(
+    year: int = Query(None),
+    month: int = Query(None),
+    _: dict = Depends(get_current_user)
+):
+    if year is None or month is None:
+        now = datetime.now()
+        year = now.year
+        month = now.month
+    
+    return await _calculate_monthly_savings(year, month)
+
+
+@api.get("/reports/accounts-summary")
+async def get_accounts_summary(_: dict = Depends(get_current_user)):
+    accounts = await db.bank_accounts.find({}, {"_id": 0}).to_list(100)
+    total_balance = sum(acc.get("balance", 0) for acc in accounts)
+    
+    return {
+        "accounts": accounts,
+        "total_balance": total_balance,
+        "account_count": len(accounts)
+    }
 
 
 # ---------------- Audits ----------------
