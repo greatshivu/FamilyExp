@@ -150,8 +150,8 @@ export default function AppLayout({ children }) {
                             );
 
                             return (
-                                <div key={group.label || group.to} className="relative group">
-                                    <div onClick={() =>
+                                <div key={group.label || group.to} className="relative">
+                                    <button onClick={() =>
                                         group.children &&
                                         setOpenMenu(
                                             openMenu === group.label ? null : group.label
@@ -165,16 +165,11 @@ export default function AppLayout({ children }) {
                                         <group.icon className="w-4 h-4" />
                                         {group.label}
                                         {group.children && (
-                                            <span className="text-xs" onClick={() =>
-                                                group.children &&
-                                                setOpenMenu(
-                                                    openMenu === group.label ? null : group.label
-                                                )
-                                            } >
+                                            <span className="text-xs ml-1">
                                                 {openMenu === group.label ? "▲" : "▼"}
                                             </span>
                                         )}
-                                    </div>
+                                    </button>
 
                                     {group.children && openMenu === group.label && (
                                         <div className="absolute left-0 top-full mt-[0px] bg-white shadow-lg rounded-md p-2 z-50">
