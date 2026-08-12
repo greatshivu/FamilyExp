@@ -1,0 +1,118 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --primary: #2d4c3b;
+  --primary-hover: #1e3629;
+  --secondary: #e8e5dc;
+  --warning: #c35a42;
+  --success: #3f6450;
+  --text-main: #1c1f1d;
+  --text-muted: #5c635f;
+  --border-color: #dcd7cb;
+}
+
+html,
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--text-main);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: "Manrope", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shadcn variables mapped to earthy theme */
+@layer base {
+  :root {
+    --background: 50 27% 95%;
+    --foreground: 130 7% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 130 7% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 130 7% 11%;
+    --primary: 142 25% 24%;
+    --primary-foreground: 50 27% 95%;
+    --secondary: 44 19% 89%;
+    --secondary-foreground: 130 7% 11%;
+    --muted: 44 19% 92%;
+    --muted-foreground: 132 4% 38%;
+    --accent: 44 19% 89%;
+    --accent-foreground: 142 25% 24%;
+    --destructive: 11 53% 51%;
+    --destructive-foreground: 50 27% 95%;
+    --border: 40 19% 80%;
+    --input: 40 19% 80%;
+    --ring: 142 25% 24%;
+    --chart-1: 142 25% 24%;
+    --chart-2: 11 53% 51%;
+    --chart-3: 132 22% 35%;
+    --chart-4: 40 30% 60%;
+    --chart-5: 132 4% 38%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Tabular numbers for financial data */
+.amount,
+[data-testid$="-amount"],
+[data-testid$="-value"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle paper texture noise for background */
+.bg-paper {
+  background-color: #f5f4f0;
+  background-image: radial-gradient(rgba(28, 31, 29, 0.025) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* Auth page background */
+.auth-bg {
+  background-image: linear-gradient(rgba(28, 31, 29, 0.55), rgba(28, 31, 29, 0.75)),
+    url("https://static.prod-images.emergentagent.com/jobs/6df0ea37-10e4-4403-bd92-20e5d7d4784d/images/2acb1d44733d4b2b285c7518995a486c5011bed08409a6bd27782c624a9a35a8.png");
+  background-size: cover;
+  background-position: center;
+}
+
+/* List stagger */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+  animation: fadeUp 0.35s ease-out both;
+}
+
+@layer base {
+  [data-debug-wrapper="true"] {
+    display: contents !important;
+  }
+}

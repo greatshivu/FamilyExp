@@ -1,0 +1,91 @@
+{
+  "theme": "LIGHT",
+  "archetype": "1 (Organic & Earthy)",
+  "concept": "High-End Botanical Field Guide meets Finance Control Room. Deep earthy tones optimized for outdoor glare, utilizing strict grid structures with high contrast.",
+  "typography": {
+    "heading_font": "Manrope",
+    "body_font": "IBM Plex Sans",
+    "font_pairings": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-black text-[#1C1F1D]",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-bold text-[#1C1F1D]",
+      "h3": "text-xl sm:text-2xl font-bold text-[#2D4C3B]",
+      "h4": "text-lg sm:text-xl font-semibold text-[#1C1F1D]",
+      "body": "text-base leading-relaxed text-[#5C635F] font-normal",
+      "overline": "text-xs tracking-[0.2em] uppercase font-bold text-[#8C938F]"
+    },
+    "rules": "Never center headings unless necessary. Left-align for reading speed. Tabular nums for all financial data in IBM Plex Sans."
+  },
+  "colors": {
+    "background": "#F5F4F0",
+    "surface": "#FFFFFF",
+    "primary": "#2D4C3B",
+    "primary_hover": "#1E3629",
+    "secondary": "#E8E5DC",
+    "accent_warning": "#C35A42",
+    "accent_success": "#3F6450",
+    "text_main": "#1C1F1D",
+    "text_muted": "#5C635F",
+    "border": "#DCD7CB"
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "p-1, p-2, p-4, p-6, p-8, p-12, p-16, p-24, p-32",
+    "card_padding": "p-6 sm:p-8",
+    "border_radius": "rounded-md (max 8px)",
+    "grid_system": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6",
+    "strategy": "Control Room Grid. Strict hierarchy. Dense and compact data but with generous internal padding (p-6) in borders to prevent collision. Mobile-first stacking."
+  },
+  "components": {
+    "card": "bg-white border border-[#DCD7CB] rounded-md shadow-sm hover:border-[#8C938F] transition-colors duration-200",
+    "button_primary": "bg-[#2D4C3B] text-[#F5F4F0] rounded-md px-6 py-3 font-semibold hover:bg-[#1E3629] focus:ring-2 focus:ring-offset-2 focus:ring-[#2D4C3B] transition-all",
+    "button_secondary": "bg-[#E8E5DC] text-[#1C1F1D] rounded-md px-6 py-3 font-semibold hover:bg-[#DCD7CB] transition-all",
+    "input": "w-full bg-white border border-[#DCD7CB] rounded-md px-4 py-3 text-[#1C1F1D] focus:outline-none focus:border-[#2D4C3B] focus:ring-1 focus:ring-[#2D4C3B] shadow-sm",
+    "header": "sticky top-0 z-50 bg-[#F5F4F0]/90 backdrop-blur-xl border-b border-[#DCD7CB]",
+    "badge": "bg-[#E8E5DC] text-[#2D4C3B] px-2 py-1 rounded text-xs font-bold tracking-wide"
+  },
+  "motion": {
+    "hover": "transition-all duration-200 ease-out",
+    "modal_enter": "animate-in fade-in zoom-in-95 duration-200",
+    "list_stagger": "staggered entrance for list items, minimal micro-interactions to preserve field usability."
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "style": "Use 'regular' weight for UI actions, 'duotone' weight for empty states or large decorative headers."
+  },
+  "media": {
+    "login_background": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/6df0ea37-10e4-4403-bd92-20e5d7d4784d/images/2acb1d44733d4b2b285c7518995a486c5011bed08409a6bd27782c624a9a35a8.png",
+      "description": "Minimalist landscape photograph of a serene goat farm at golden hour used for login page overlay",
+      "usage": "Login Page Full Background. MUST use a gradient overlay (bg-black/30 or bg-gradient-to-t from-black/60 to-transparent) to ensure form legibility."
+    },
+    "dashboard_texture": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/6df0ea37-10e4-4403-bd92-20e5d7d4784d/images/b93f4720e4d7e96703fc8ae7587721143e78e22a2709904aaf2162088836a1a4.png",
+      "description": "Abstract organic texture in clay/sage",
+      "usage": "Optional top hero banner texture on the Dashboard or Reports page to add depth."
+    },
+    "family_placeholder": {
+      "url": "https://images.unsplash.com/photo-1728601279261-50e766799238?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNzl8MHwxfHNlYXJjaHwxfHxnb2F0JTIwZmFybSUyMGZpZWxkfGVufDB8fHx8MTc3OTM5ODc4MXww&ixlib=rb-4.1.0&q=85",
+      "description": "Family photo placeholder",
+      "usage": "Decorative image for 'Goat Trading' category or empty states in transactions."
+    },
+    "crop_placeholder": {
+      "url": "https://images.unsplash.com/photo-1777045453423-b9aaf76d6eb6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHwxfHxhZ3JpY3VsdHVyZSUyMGJhbmFuYSUyMGZpZWxkfGVufDB8fHx8MTc3OTM5ODc4MXww&ixlib=rb-4.1.0&q=85",
+      "description": "Banana fields and crops",
+      "usage": "Decorative image for 'Field Expenses' or 'Banana' category empty states."
+    }
+  },
+  "accessibility": {
+    "contrast": "All text over background must meet 4.5:1 ratio. The UI operates in high-sunlight outdoor conditions; maximize contrast on data.",
+    "focus": "All interactive elements must use focus:ring-2 focus:ring-offset-2",
+    "data_testid": "MANDATORY. Add 'data-testid' to all buttons, form inputs, navigation links, and key financial summaries (e.g., data-testid='expense-submit-btn')."
+  },
+  "instructions_to_main_agent": [
+    "Build a mobile-first, highly legible dashboard optimized for field usability and outdoor glare.",
+    "Implement the UI using React, Tailwind CSS, and Shadcn primitives (Card, Select, Dialog, Form).",
+    "Logic rule: When adding an expense, if 'Paid from: Own Pocket' is selected, automatically generate a corresponding 'Investment' record for that partner.",
+    "Do NOT use default 'tech blue' anywhere. Strictly adhere to the Earthy & Organic palette provided above.",
+    "Use pure HTML/Tailwind for responsive structural grids (bento-style asymmetry where it makes sense), and Recharts or Shadcn Charts for data visualizations (Monthly Income/Expense).",
+    "For the login page, use the 'login_background' media URL as the full-screen background with a solid or glassmorphism form container.",
+    "Ensure the Transactions List has clear filters and prominent CSV/PDF export buttons.",
+    "Currency is ₹ INR (Indian Rupees). Format all monetary values clearly with tabular numbers."
+  ]
+}
