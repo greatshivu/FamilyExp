@@ -355,21 +355,24 @@ class AuditLog(BaseModel):
 
 # ---------------- Seed ----------------
 DEFAULT_CATEGORIES = [
-    ("Milk", "income"),
-    ("Ghee", "income"),
-    ("Cheese", "income"),
+    ("Salary", "income"),
+    ("Tax Retrun", "income"),
+    ("Bank Interest", "income"),
     ('Trading', 'income'),
-    ("Flower Sales", "income"),
-    ("Banana Sales", "income"),
-    ("Transportation", "expense"),
-    ("Labor", "expense"),
-    ("Power Bill", "expense"),
-    ("Pesticides", "expense"),
-    ("Medicines", "expense"),
-    ("Feeds", "expense"),
-    ("Grass Cutting", "expense"),
-    ("Repairs", "expense"),
-    ("Field Expenses", "expense"),
+    ("Car EMI", "expense"),
+    ("Car Insurance", "expense"),
+    ("Dinner/Lunch", "expense"),
+    ("Fuel", "expense"),
+    ("Insurance", "expense"),
+    ("Internet", "expense"),
+    ("Hospital/Medicines", "expense"),
+    ("Movie", "expense"),
+    ("Power/Water Bill", "expense"),
+    ("Ration/Vegetable", "expense"),
+    ("Rent", "expense"),
+    ("Shopping", "expense"),
+    ("Trip/Travel", "expense"),
+    ("Other", "expense")
 ]
 
 
