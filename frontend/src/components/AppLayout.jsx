@@ -16,6 +16,8 @@ import {
     Trash2,
     StickyNote,
     Camera,
+    Wallet,
+    PiggyBank,
 } from "lucide-react";
 
 const groupedBaseNav = [
@@ -33,6 +35,14 @@ const groupedBaseNav = [
         children: [
             { to: "/transactions", label: "Transactions", icon: ListChecks, testid: "nav-transactions" },
             { to: "/categories", label: "Categories", icon: Tags, testid: "nav-categories" },
+        ],
+    },
+    {
+        label: "Savings",
+        icon: Wallet,
+        children: [
+            { to: "/accounts", label: "Accounts", icon: Wallet, testid: "nav-accounts" },
+            { to: "/savings", label: "Savings", icon: PiggyBank, testid: "nav-savings" },
         ],
     },
     {
