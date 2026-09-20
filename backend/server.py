@@ -159,12 +159,14 @@ class UserOut(BaseModel):
     phone: Optional[str] = None
     role: str = "partner"
     status: str = "pending"
+    currency: Literal["INR", "USD"] = "INR"
     created_at: str
 
 
 class ProfileUpdateIn(BaseModel):
     name: str
     phone: Optional[str] = None
+    currency: Optional[Literal["INR", "USD"]] = None
 
 
 class PasswordChangeIn(BaseModel):
@@ -550,6 +552,7 @@ async def register(payload: RegisterIn, background: BackgroundTasks):
         "phone": payload.phone,
         "role": "partner",
         "status": "pending",
+        "currency": "INR",
         "password_hash": hash_password(payload.password),
         "created_at": utc_now_iso(),
     }
@@ -604,7 +607,11 @@ async def update_profile(payload: ProfileUpdateIn, user: dict = Depends(get_curr
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name cannot be empty")
-    updates = {"name": name, "phone": (payload.phone or "").strip() or None}
+    updates = {
+        "name": name,
+        "phone": (payload.phone or "").strip() or None,
+        "currency": payload.currency or user.get("currency", "INR"),
+    }
     await db.users.update_one({"id": user["id"]}, {"$set": updates})
     user.update(updates)
     return UserOut(**user)

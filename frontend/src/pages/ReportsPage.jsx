@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { api, inr } from "@/lib/api";
+import { api, currencySymbol, inr } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -218,7 +218,7 @@ export default function ReportsPage() {
                 <BarChart data={monthly}>
                   <CartesianGrid stroke="#DCD7CB" strokeDasharray="2 4" vertical={false} />
                   <XAxis dataKey="label" stroke="#5C635F" fontSize={11} />
-                  <YAxis stroke="#5C635F" fontSize={11} tickFormatter={(v) => `₹${v / 1000}k`} />
+                  <YAxis stroke="#5C635F" fontSize={11} tickFormatter={(v) => `${currencySymbol()}${v / 1000}k`} />
                   <Tooltip formatter={(v) => inr(v)} contentStyle={{ background: "#FFFFFF", border: "1px solid #DCD7CB" }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="income" fill="#2D4C3B" name="Income" radius={[3, 3, 0, 0]} />
@@ -470,7 +470,7 @@ function TotalsBreakdown() {
                 <BarChart data={data.monthly}>
                   <CartesianGrid stroke="#DCD7CB" strokeDasharray="2 4" vertical={false} />
                   <XAxis dataKey="label" stroke="#5C635F" fontSize={11} />
-                  <YAxis stroke="#5C635F" fontSize={11} tickFormatter={(v) => `₹${v / 1000}k`} />
+                  <YAxis stroke="#5C635F" fontSize={11} tickFormatter={(v) => `${currencySymbol()}${v / 1000}k`} />
                   <Tooltip formatter={(v) => inr(v)} contentStyle={{ background: "#FFFFFF", border: "1px solid #DCD7CB" }} />
                   <Bar dataKey="amount" fill={color} name={label} radius={[3, 3, 0, 0]} />
                 </BarChart>

@@ -46,9 +46,15 @@ export function formatApiError(detail) {
   return String(detail);
 }
 
-export function inr(n) {
+export function currencySymbol(currency = localStorage.getItem("family_currency") || "INR") {
+  return currency === "USD" ? "$" : "₹";
+}
+
+export function inr(n, currency) {
   const v = Number(n || 0);
-  return "₹" + v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  const resolvedCurrency = currency || localStorage.getItem("family_currency") || "INR";
+  const locale = resolvedCurrency === "USD" ? "en-US" : "en-IN";
+  return currencySymbol(resolvedCurrency) + v.toLocaleString(locale, { maximumFractionDigits: 2 });
 }
 
 export function todayISO() {

@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
       try {
         const { data } = await api.get("/auth/me");
         setUser(data);
+        localStorage.setItem("family_currency", data.currency || "INR");
       } catch {
         setUser(false);
       } finally {
@@ -24,6 +25,7 @@ export function AuthProvider({ children }) {
     try {
       const { data } = await api.post("/auth/login", { email, password });
       setUser(data);
+      localStorage.setItem("family_currency", data.currency || "INR");
       return { ok: true };
     } catch (e) {
       return { ok: false, error: formatApiError(e.response?.data?.detail) || e.message };
@@ -34,6 +36,7 @@ export function AuthProvider({ children }) {
     try {
       const { data } = await api.get("/auth/me");
       setUser(data);
+      localStorage.setItem("family_currency", data.currency || "INR");
     } catch {
       setUser(false);
     }

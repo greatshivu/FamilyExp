@@ -1,75 +1,89 @@
-# Getting Started with Create React App
+# Family Expense Manager Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+The frontend is a React single-page application built with Create React App and CRACO. It uses React Router, Tailwind CSS, Shadcn/Radix UI primitives, Recharts, jsPDF, and Papa Parse.
 
-# Build and run
-`npm install`
-`npm run build`
-`npm start`
+## Requirements
 
-## Available Scripts
+- Node.js and npm
+- Yarn 1.x recommended; the repository pins Yarn through `package.json`
+- A running Family Expense Manager backend
 
-In the project directory, you can run:
+## Configuration
 
-### `npm start`
+Create `frontend/.env`:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```dotenv
+REACT_APP_BACKEND_URL=http://localhost:8000
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+The value is the backend origin only. API requests are sent to `${REACT_APP_BACKEND_URL}/api`.
 
-### `npm test`
+Optional development health-check support:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```dotenv
+ENABLE_HEALTH_CHECK=true
+```
 
-### `npm run build`
+This enables the CRACO health-check plugin during development. It is not required for normal application use.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Install and run
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```bash
+cd frontend
+yarn install
+yarn start
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+The development server opens at `http://localhost:3000` and sends requests directly to the configured backend URL through the shared API client.
 
-### `npm run eject`
+If Yarn is unavailable, npm can run the scripts after installing dependencies with `npm install`:
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```bash
+npm install
+npm start
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Available scripts
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+- `yarn start` or `npm start`: run the development server.
+- `yarn test` or `npm test`: run the React test runner.
+- `yarn build` or `npm run build`: create the production bundle in `build/`.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## Application routes
 
-## Learn More
+Public routes:
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+- `/login`
+- `/register`
+- `/forgot-password`
+- `/reset-password`
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Protected user routes:
 
-### Code Splitting
+- `/dashboard`
+- `/transactions`
+- `/accounts`
+- `/savings`
+- `/categories`
+- `/reports`
+- `/notes`
+- `/farm-updates`
+- `/profile`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Protected admin routes:
 
-### Analyzing the Bundle Size
+- `/admin/accounts`
+- `/admin/deletions`
+- `/audits`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## Frontend behavior
 
-### Making a Progressive Web App
+- `AuthProvider` loads `/api/auth/me` and shares the current user with protected pages.
+- Authentication requests use credentials so backend cookies are sent with API calls.
+- Currency is selected under Profile and saved in the backend user record. New and legacy users default to INR; display formatting switches between Indian INR and US dollar locales.
+- Reports provide CSV and PDF exports from the currently loaded report data.
+- The interface is designed for mobile-first field use and follows the earthy visual palette in `design_guidelines.json`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Production deployment
 
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Run `yarn build` or `npm run build`, then deploy the generated `build/` directory to a static hosting provider. Configure `REACT_APP_BACKEND_URL` at build time, and configure the backend `CORS_ORIGINS` and `FRONTEND_URL` to use the deployed frontend origin.

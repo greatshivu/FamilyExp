@@ -170,6 +170,17 @@ class TestProfileAndPhone:
         me = s.get(f"{API}/auth/me").json()
         assert me["phone"] == new_phone
 
+    def test_profile_currency_is_saved_and_returned(self, approved_partner):
+        s, _ = approved_partner
+        r = s.patch(f"{API}/auth/profile", json={
+            "name": "Currency User",
+            "phone": None,
+            "currency": "USD",
+        })
+        assert r.status_code == 200
+        assert r.json()["currency"] == "USD"
+        assert s.get(f"{API}/auth/me").json()["currency"] == "USD"
+
     def test_phone_flows_via_register_me_admin_list(self, admin):
         email = f"phone_user_{uuid.uuid4().hex[:8]}@test.com"
         phone = "+918888888888"

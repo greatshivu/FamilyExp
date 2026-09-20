@@ -1,6 +1,6 @@
 // src/pages/AuditLogs.jsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { api, formatApiError } from "@/lib/api";
+import { api, formatApiError, inr } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -46,7 +46,7 @@ function AuditRow({ item, index }) {
       </td>
 
       <td className="px-4 py-3 font-medium text-[#1C1F1D] tabular">
-        ₹ {Number(item.amount || 0).toFixed(2)}
+        {inr(item.amount)}
       </td>
 
       <td className="px-4 py-3 text-sm text-[#5C635F]">

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { api, formatApiError } from "@/lib/api";
+import { api, currencySymbol, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +31,7 @@ export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "");
+  const [currency, setCurrency] = useState(user?.currency || "INR");
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -43,7 +44,7 @@ export default function ProfilePage() {
     if (!name.trim()) return toast.error("Name cannot be empty");
     setSavingProfile(true);
     try {
-      await api.patch("/auth/profile", { name: name.trim(), phone: phone.trim() || null });
+      await api.patch("/auth/profile", { name: name.trim(), phone: phone.trim() || null, currency });
       await refreshUser();
       toast.success("Profile updated");
     } catch (err) {
@@ -119,6 +120,22 @@ export default function ProfilePage() {
             {savingProfile ? "Saving…" : "Save profile"}
           </Button>
         </form>
+        <div className="border-t border-[#DCD7CB] pt-6 mt-6">
+          <h3 className="font-display text-lg font-bold text-[#2D4C3B]">Currency</h3>
+          <p className="text-sm text-[#5C635F] mt-1 mb-3">Choose the currency used throughout the application.</p>
+          <div className="flex items-center gap-3">
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              data-testid="profile-currency-select"
+              className="h-10 rounded-md border border-[#DCD7CB] bg-white px-3 text-sm"
+            >
+              <option value="INR">₹ Indian Rupee (INR)</option>
+              <option value="USD">$ US Dollar (USD)</option>
+            </select>
+            <span className="text-sm text-[#5C635F]">Currently using {currencySymbol(currency)}</span>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white border border-[#DCD7CB] rounded-md p-6 sm:p-8">

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, inr } from "@/lib/api";
+import { api, currencySymbol, inr } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
 import {
   ResponsiveContainer,
@@ -82,7 +82,7 @@ export default function DashboardPage() {
           </h1>
         </div>
         <div className="text-sm text-[#5C635F]">
-          Fiscal year {year} · ₹ INR
+              Fiscal year {year} · {currencySymbol()} {currencySymbol() === "$" ? "USD" : "INR"}
         </div>
       </div>
 
@@ -172,7 +172,7 @@ export default function DashboardPage() {
               <BarChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#DCD7CB" strokeDasharray="2 4" vertical={false} />
                 <XAxis dataKey="label" stroke="#5C635F" fontSize={11} />
-                <YAxis stroke="#5C635F" fontSize={11} tickFormatter={(v) => `₹${v / 1000}k`} />
+                <YAxis stroke="#5C635F" fontSize={11} tickFormatter={(v) => `${currencySymbol()}${v / 1000}k`} />
                 <Tooltip
                   formatter={(v) => inr(v)}
                   contentStyle={{

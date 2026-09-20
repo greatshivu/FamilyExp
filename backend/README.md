@@ -1,84 +1,109 @@
-# Prerequisit
-Python
-Pylance
-NodeJS
-NPM
-MONGO DB
+# Family Expense Manager Backend
 
-# Building application
+The backend is a FastAPI service backed by MongoDB. It provides authentication, family finance APIs, admin workflows, reporting, email notifications, and audit logging.
 
-## Create .env file and paste below
-MONGO_URL=<Connection string or url>
-DB_NAME=<DB Name>
-CORS_ORIGINS="*"
-JWT_SECRET="<Secret>"
-ADMIN_EMAIL="<Admin Account email>"
-ADMIN_PASSWORD="<Admin password>"
+## Stack
 
-Enable environment vairable for python.
+- FastAPI and Uvicorn
+- Pydantic request/response models
+- Motor with MongoDB for asynchronous application data access
+- A separate MongoDB database for audit records
+- JWT access and refresh tokens stored in HTTP-only cookies
+- Brevo transactional email integration
+- Pytest and Requests for API tests
 
-1) `cd backend`
-2) `python -m venv venv`
-3) `venv\Scripts\activate`
-4) `pip install -r requirements.txt`  one time(Any new packege then run this command)
+## Environment variables
 
-# Running application
-`uvicorn server:app --host 0.0.0.0 --port 8000`
+Create `backend/.env`. Required values:
 
-Verify http://localhost:8000/docs will be running
-/health
-/api/users
+```dotenv
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=family_expense
+AUDIT_MONGO_URL=mongodb://localhost:27017
+AUDIT_DB_NAME=family_expense_audit
+JWT_SECRET=replace-with-a-long-random-secret
+```
 
-any errors, look for module and install using `pip install package_name`
+Application and audit databases may use the same MongoDB server, but they should remain separate database names. In production, use a strong unique `JWT_SECRET` and keep `.env` out of source control.
 
-# Deployment using CloudFlare tunnel
+Optional values:
 
-## Login to CloudFlare
-`cloudflared login`
+```dotenv
+# Comma-separated browser origins. The code defaults to "*" for development.
+CORS_ORIGINS=http://localhost:3000
 
-## Create tunnel
-`cloudflared tunnel create familyapi-tunnel`
-This outputs a Tunnel ID — keep it.
+# Used in approval and password-reset links.
+FRONTEND_URL=http://localhost:3000
 
-## Create the tunnel config file
+# First admin created during startup. Defaults exist for development only.
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=replace-with-a-strong-password
 
-Press 
-`Win + r`
-then paste below command
-`notepad C:\Users\<UserName>\.cloudflared\config.yml`
+# Enable Brevo email delivery. Without these, messages are logged and skipped.
+BREVO_API_KEY=your-brevo-api-key
+SENDER_EMAIL=no-reply@example.com
+```
 
-Or Poweshell
-`New-Item -Path "$env:USERPROFILE\.cloudflared\config.yml" -ItemType File`
+Email notifications are best effort. Registration, approval, rejection, deletion, and password-reset messages are logged even when Brevo is not configured.
 
-Then Put below content inside & replace <TUNNEL_ID> with your actual ID && localhost:8000 with your FastAPI port:
+## Install and run
 
-tunnel: familyapi-tunnel
-credentials-file: C:\Users\<UserName>\.cloudflared\<TUNNEL_ID>.json
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn server:app --reload --host 0.0.0.0 --port 8000
+```
 
-ingress:
-  - hostname: <Your host Name: Tunneling host name exposed to website>
-    service: http://localhost:8000
-  - service: http_status:404
+On Windows, activate the environment with `.venv\\Scripts\\activate`.
 
+Service endpoints:
 
-## Create DNS record automatically
-`cloudflared tunnel route dns familyapi-tunnel <Your host Name which will be exposed to website>`
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+- Health: `GET /health`
+- Detailed health: `GET /health/details`
+- Database health: `GET /health/db`
+- API routes: `/api/*`
 
-Cloudflare will create a CNAME like: familyapi → <TUNNEL_ID>.cfargotunnel.com
+## API areas
 
-## Start Tunnel
-`cloudflared tunnel run familyapi-tunnel`
+The API is mounted under `/api` and requires authentication for protected resources.
 
-## Make sure FastAPI is Running http://localhost:8000
-`uvicorn server:app --host 0.0.0.0 --port 8000`
+- `/auth/*`: registration, login, logout, profile, password changes, and password reset.
+- `/admin/*`: user approval, rejection, editing, reset links, and deletion.
+- `/deletion-requests/*`: partner deletion requests and admin decisions.
+- `/users/partners`, `/partners`: partner data.
+- `/categories`: category management.
+- `/incomes`, `/expenses`, `/investments`: transaction CRUD.
+- `/accounts`, `/savings`: account and savings CRUD.
+- `/reports/*`: summary, monthly, category, partner, transaction, and savings reports.
+- `/notes/*`: individual and common notes with replies.
+- `/farm-updates`: farm update records and attachments.
+- `/audits`: audit records.
 
-## CORS For front end
-rom fastapi.middleware.cors import CORSMiddleware
+## Tests
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["<hostname- ex- https://xxx.yyy.com>"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+The API tests require a reachable backend and an approved admin account:
+
+```bash
+cd backend
+export REACT_APP_BACKEND_URL=http://localhost:8000
+export ADMIN_EMAIL=admin@example.com
+export ADMIN_PASSWORD='your-admin-password'
+pytest -q
+```
+
+The test suite creates temporary users and removes them after each test where applicable. Never point it at production data.
+
+## Deployment
+
+For Render, use:
+
+- Root directory: `backend`
+- Build command: `pip install -r requirements.txt`
+- Start command: `uvicorn server:app --host 0.0.0.0 --port $PORT`
+- Health check path: `/health`
+
+Set all required environment variables in the hosting provider. Set `CORS_ORIGINS` to the exact frontend origin and `FRONTEND_URL` to the public frontend URL.

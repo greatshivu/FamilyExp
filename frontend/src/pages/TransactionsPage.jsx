@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { api, formatApiError, inr, todayISO, selectedISO } from "@/lib/api";
+import { api, currencySymbol, formatApiError, inr, todayISO, selectedISO } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -201,7 +201,7 @@ function IncomeDialog({ categories, filterMode, month, year, onCreated, transact
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Amount (₹ <b>{formatIndianNumber(amount)}</b>)</Label>
+              <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Amount ({currencySymbol()} <b>{formatIndianNumber(amount)}</b>)</Label>
               <Input data-testid="income-amount-input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
             <div>
@@ -308,7 +308,7 @@ function ExpenseDialog({ categories, filterMode, month, year, partners, onCreate
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Amount (₹ <b>{formatIndianNumber(amount)}</b>)</Label>
+              <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Amount ({currencySymbol()} <b>{formatIndianNumber(amount)}</b>)</Label>
               <Input data-testid="expense-amount-input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
             <div>
@@ -416,7 +416,7 @@ function InvestmentDialog({ partners, filterMode, month, year, onCreated, transa
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Amount (₹ <b>{formatIndianNumber(amount)}</b>)</Label>
+              <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Amount ({currencySymbol()} <b>{formatIndianNumber(amount)}</b>)</Label>
               <Input data-testid="investment-amount-input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={transaction && transaction.source === "expense"} />
             </div>
             <div>
