@@ -229,6 +229,7 @@ class IncomeIn(BaseModel):
     date: str  # YYYY-MM-DD
     note: Optional[str] = None
     attachment: Optional[str] = None
+    account_id: Optional[str] = None
 
 
 class Income(BaseModel):
@@ -238,6 +239,7 @@ class Income(BaseModel):
     date: str
     note: Optional[str] = None
     attachment: Optional[str] = None
+    account_id: Optional[str] = None
     created_by: str
     created_by_name: str
     created_at: str
@@ -248,9 +250,11 @@ class ExpenseIn(BaseModel):
     amount: float
     date: str
     note: Optional[str] = None
-    paid_from: Literal["account", "pocket"]
+    paid_from: Literal["account", "pocket", "credit_card"]
     partner_id: Optional[str] = None  # required if paid_from == pocket
     attachment: Optional[str] = None
+    account_id: Optional[str] = None
+    family_account_id: Optional[str] = None
 
 
 class Expense(BaseModel):
@@ -259,10 +263,12 @@ class Expense(BaseModel):
     amount: float
     date: str
     note: Optional[str] = None
-    paid_from: Literal["account", "pocket"]
+    paid_from: Literal["account", "pocket", "credit_card"]
     partner_id: Optional[str] = None
     partner_name: Optional[str] = None
     attachment: Optional[str] = None
+    account_id: Optional[str] = None
+    family_account_id: Optional[str] = None
     created_by: str
     created_by_name: str
     created_at: str
@@ -421,6 +427,7 @@ DEFAULT_CATEGORIES = [
     ("Rent", "expense"),
     ("Shopping", "expense"),
     ("Trip/Travel", "expense"),
+    ("CC Bill", "expense"),
     ("Other", "expense")
 ]
 
@@ -915,6 +922,63 @@ async def _partner_name(pid: Optional[str]) -> Optional[str]:
     return p["name"] if p else None
 
 
+async def _credit_card(account_id: Optional[str]) -> Optional[dict]:
+    if not account_id:
+        return None
+    return await db.bank_accounts.find_one(
+        {"id": account_id, "account_type": "credit_card"}, {"_id": 0}
+    )
+
+
+async def _adjust_credit_card(account_id: Optional[str], amount: float):
+    if account_id and amount:
+        await db.bank_accounts.update_one({"id": account_id}, {"$inc": {"balance": amount}})
+
+
+async def _validate_income_account(account_id: Optional[str]):
+    if account_id:
+        account = await db.bank_accounts.find_one({"id": account_id}, {"_id": 0})
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+
+async def _validate_expense_account(payload: ExpenseIn):
+    if payload.paid_from == "credit_card":
+        if not payload.account_id:
+            raise HTTPException(status_code=400, detail="Credit card is required")
+        if not await _credit_card(payload.account_id):
+            raise HTTPException(status_code=404, detail="Credit card not found")
+    elif payload.account_id:
+        account = await db.bank_accounts.find_one({"id": payload.account_id}, {"_id": 0})
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        if account.get("account_type") == "credit_card" and payload.category != "CC Bill":
+            raise HTTPException(status_code=400, detail="Use credit_card as paid_from for card transactions")
+
+    if payload.family_account_id:
+        family_account = await db.bank_accounts.find_one({"id": payload.family_account_id}, {"_id": 0})
+        if not family_account:
+            raise HTTPException(status_code=404, detail="Family account not found")
+        if family_account.get("account_type") == "credit_card":
+            raise HTTPException(status_code=400, detail="Family account cannot be a credit card")
+
+    if payload.category == "CC Bill":
+        if payload.paid_from != "account" or not payload.account_id or not payload.family_account_id:
+            raise HTTPException(status_code=400, detail="CC Bill must be paid from a family account and select a credit card")
+        if not await _credit_card(payload.account_id):
+            raise HTTPException(status_code=404, detail="Credit card not found")
+
+
+def _card_balance_delta(expense: dict) -> float:
+    if not expense.get("account_id"):
+        return 0
+    if expense.get("category") == "CC Bill" and expense.get("paid_from") == "account":
+        return -float(expense.get("amount", 0))
+    if expense.get("paid_from") == "credit_card":
+        return float(expense.get("amount", 0))
+    return 0
+
+
 # ---------------- Incomes ----------------
 @api.get("/incomes")
 async def list_incomes(_: dict = Depends(get_current_user)):
@@ -927,6 +991,7 @@ async def list_incomes(_: dict = Depends(get_current_user)):
 
 @api.post("/incomes", response_model=Income)
 async def create_income(payload: IncomeIn, user: dict = Depends(get_current_user)):
+    await _validate_income_account(payload.account_id)
     doc_id = str(uuid.uuid4())
     doc = {
         "id": doc_id,
@@ -958,6 +1023,7 @@ async def update_income(income_id: str, payload: IncomeIn, user: dict = Depends(
         raise HTTPException(status_code=404, detail="Income not found")
     if user["role"] != "admin" and existing["created_by"] != user["id"]:
         raise HTTPException(status_code=403, detail="Not authorized to edit this income")
+    await _validate_income_account(payload.account_id)
     update_data = payload.model_dump()
     await db.incomes.update_one({"id": income_id}, {"$set": update_data})
     await create_audit(user, "Update", "income", income_id, payload.amount, payload.date, payload.category)
@@ -982,6 +1048,7 @@ async def create_expense(payload: ExpenseIn, user: dict = Depends(get_current_us
     partner_name = await _partner_name(payload.partner_id)
     if payload.paid_from == "pocket" and not partner_name:
         raise HTTPException(status_code=404, detail="Partner not found")
+    await _validate_expense_account(payload)
 
     exp_id = str(uuid.uuid4())
     exp_doc = {
@@ -1014,6 +1081,8 @@ async def create_expense(payload: ExpenseIn, user: dict = Depends(get_current_us
         await db.investments.insert_one(inv_doc)
         await create_audit(user, "Add", "investment", inv_id, payload.amount, payload.date, "Auto-Expense")
 
+    await _adjust_credit_card(payload.account_id, _card_balance_delta(exp_doc))
+
     return exp_doc
 
 
@@ -1028,6 +1097,7 @@ async def delete_expense(expense_id: str, user: dict = Depends(get_admin_user)):
     existing = await db.expenses.find_one({"id": expense_id})
     if existing:
         await create_audit(user, "Delete", "expense", expense_id, existing["amount"], existing["date"], existing["category"])
+        await _adjust_credit_card(existing.get("account_id"), -_card_balance_delta(existing))
     
     await db.expenses.delete_one({"id": expense_id})
     await db.deletion_requests.delete_many({"resource_type": "expense", "resource_id": expense_id})
@@ -1047,6 +1117,9 @@ async def update_expense(expense_id: str, payload: ExpenseIn, user: dict = Depen
     partner_name = await _partner_name(payload.partner_id)
     if payload.paid_from == "pocket" and not partner_name:
         raise HTTPException(status_code=404, detail="Partner not found")
+    await _validate_expense_account(payload)
+
+    await _adjust_credit_card(existing.get("account_id"), -_card_balance_delta(existing))
 
     update_data = payload.model_dump()
     update_data["partner_name"] = partner_name
@@ -1077,6 +1150,7 @@ async def update_expense(expense_id: str, payload: ExpenseIn, user: dict = Depen
         await create_audit(user, "Add", "investment", inv_id, payload.amount, payload.date, "Auto-Expense-Update")
 
     updated = await db.expenses.find_one({"id": expense_id}, {"_id": 0})
+    await _adjust_credit_card(payload.account_id, _card_balance_delta(updated))
     return updated
 
 
@@ -1265,6 +1339,49 @@ async def transactions(
 
     out.sort(key=lambda x: x["date"], reverse=True)
     return out
+
+
+@api.get("/credit-cards/{account_id}/transactions")
+async def credit_card_transactions(
+    account_id: str,
+    year: Optional[int] = None,
+    month: Optional[str] = None,
+    _: dict = Depends(get_current_user),
+):
+    card = await _credit_card(account_id)
+    if not card:
+        raise HTTPException(status_code=404, detail="Credit card not found")
+    query = {"account_id": account_id}
+    if year and month and month.isdigit():
+        query["date"] = {"$regex": f"^{year}-{int(month):02d}-"}
+    elif year:
+        query["date"] = {"$regex": f"^{year}-"}
+    rows = await db.expenses.find(query, {"_id": 0}).sort("date", -1).to_list(5000)
+    transactions = []
+    for row in rows:
+        is_payment = row.get("category") == "CC Bill" and row.get("paid_from") == "account"
+        transactions.append({
+            "id": row["id"],
+            "date": row["date"],
+            "category": row["category"],
+            "note": row.get("note"),
+            "amount": row["amount"],
+            "type": "payment" if is_payment else "purchase",
+            "detail": row.get("note") or row["category"],
+        })
+    income_rows = await db.incomes.find(query, {"_id": 0}).sort("date", -1).to_list(5000)
+    for row in income_rows:
+        transactions.append({
+            "id": row["id"],
+            "date": row["date"],
+            "category": row["category"],
+            "note": row.get("note"),
+            "amount": row["amount"],
+            "type": "income",
+            "detail": row.get("note") or row["category"],
+        })
+    transactions.sort(key=lambda row: row["date"], reverse=True)
+    return {"card": card, "transactions": transactions, "period": {"year": year, "month": month}}
 
 
 @api.get("/reports/breakdown")

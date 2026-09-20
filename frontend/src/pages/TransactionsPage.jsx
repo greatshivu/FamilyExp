@@ -135,7 +135,7 @@ const resetValues = (setCategory, setDate, setNote, setAmount, setAttachment, op
   }
 }
 
-function IncomeDialog({ categories, filterMode, month, year, onCreated, transaction = null, open: externalOpen, setOpen: setExternalOpen }) {
+  function IncomeDialog({ categories, accounts, filterMode, month, year, onCreated, transaction = null, open: externalOpen, setOpen: setExternalOpen }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = externalOpen !== undefined ? externalOpen : internalOpen;
   const setOpen = setExternalOpen !== undefined ? setExternalOpen : setInternalOpen;
@@ -145,6 +145,10 @@ function IncomeDialog({ categories, filterMode, month, year, onCreated, transact
   const [date, setDate] = useState(filterMode === "month" ? selectedISO(month, year) : todayISO());
   const [note, setNote] = useState("");
   const [attachment, setAttachment] = useState(null);
+    const [accountId, setAccountId] = useState("");
+    setAccountId(initialValues.account_id || "");
+    setAccountId("");
+    const data = { category, amount: parseFloat(amount), date, note, attachment, account_id: accountId || null };
   
   useEffect(() => {
     resetValues(setCategory, setDate, setNote, setAmount, setAttachment, open, filterMode, month, year, transaction);
@@ -213,6 +217,13 @@ function IncomeDialog({ categories, filterMode, month, year, onCreated, transact
             <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Note</Label>
             <Textarea data-testid="income-note-input" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
+          <div>
+            <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Received in family account</Label>
+            <Select value={accountId} onValueChange={setAccountId}>
+              <SelectTrigger><SelectValue placeholder="Optional account" /></SelectTrigger>
+              <SelectContent>{accounts.map((account) => <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
           <AttachmentField attachment={attachment} onAttachmentChange={setAttachment} />
         </div>
         <DialogFooter>
@@ -225,7 +236,7 @@ function IncomeDialog({ categories, filterMode, month, year, onCreated, transact
   );
 }
 
-function ExpenseDialog({ categories, filterMode, month, year, partners, onCreated, transaction = null, open: externalOpen, setOpen: setExternalOpen }) {
+function ExpenseDialog({ categories, accounts, filterMode, month, year, partners, onCreated, transaction = null, open: externalOpen, setOpen: setExternalOpen }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = externalOpen !== undefined ? externalOpen : internalOpen;
   const setOpen = setExternalOpen !== undefined ? setExternalOpen : setInternalOpen;
@@ -236,31 +247,42 @@ function ExpenseDialog({ categories, filterMode, month, year, partners, onCreate
   const [note, setNote] = useState("");
   const [paidFromKey, setPaidFromKey] = useState("account");
   const [attachment, setAttachment] = useState(null);
+  const [familyAccountId, setFamilyAccountId] = useState("");
+  const [cardId, setCardId] = useState("");
 
   useEffect(() => {
     resetValues(setCategory, setDate, setNote, setAmount, setAttachment, open, filterMode, month, year, transaction);
     if (open) {
       if (transaction) {
-        setPaidFromKey(transaction.paid_from === "pocket" ? transaction.partner_id : "account");
+        setPaidFromKey(transaction.paid_from === "pocket" ? transaction.partner_id : transaction.paid_from === "credit_card" ? "credit_card" : "account");
+        setFamilyAccountId(transaction.family_account_id || "");
+        setCardId(transaction.account_id || "");
       } else {
         setPaidFromKey("account");
+        setFamilyAccountId("");
+        setCardId("");
       }
     }
   }, [open, filterMode, month, year, transaction]);
 
   async function submit() {
     if (!category || !amount) return toast.error("Category and amount required");
-    const isPartner = paidFromKey !== "account";
+    const isPartner = paidFromKey !== "account" && paidFromKey !== "credit_card" && !paidFromKey.startsWith("family:");
+    const isFamilyAccount = paidFromKey === "account" || paidFromKey.startsWith("family:");
     try {
       const data = {
         category,
         amount: parseFloat(amount),
         date,
         note,
-        paid_from: isPartner ? "pocket" : "account",
+        paid_from: isPartner ? "pocket" : (paidFromKey === "credit_card" ? "credit_card" : "account"),
         partner_id: isPartner ? paidFromKey : null,
         attachment,
+        account_id: paidFromKey === "credit_card" || category === "CC Bill" ? cardId || null : null,
+        family_account_id: isFamilyAccount ? (paidFromKey.startsWith("family:") ? paidFromKey.slice(7) : familyAccountId || null) : null,
       };
+      if ((paidFromKey === "credit_card" || category === "CC Bill") && !cardId) return toast.error("Select a credit card");
+      if (category === "CC Bill" && !data.family_account_id) return toast.error("Select the family account used for payment");
       if (transaction) {
         await api.put(`/expenses/${transaction.id}`, data);
         toast.success("Expense updated");
@@ -323,6 +345,10 @@ function ExpenseDialog({ categories, filterMode, month, year, partners, onCreate
               <SelectTrigger data-testid="expense-paidfrom-select"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="account">Family Account</SelectItem>
+                {accounts.filter((a) => a.account_type !== "credit_card").map((account) => (
+                  <SelectItem key={`family-${account.id}`} value={`family:${account.id}`}>{account.name}</SelectItem>
+                ))}
+                <SelectItem value="credit_card">Credit Card</SelectItem>
                 {partners.map((p) => (
                   <SelectItem key={p.id} value={p.id} data-testid={`paidfrom-partner-${p.id}`}>
                     {p.name} (partner pocket → investment)
@@ -330,7 +356,30 @@ function ExpenseDialog({ categories, filterMode, month, year, partners, onCreate
                 ))}
               </SelectContent>
             </Select>
-            {paidFromKey !== "account" && (
+            {paidFromKey === "credit_card" && (
+              <div className="mt-3">
+                <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Credit card</Label>
+                <Select value={cardId} onValueChange={setCardId}>
+                  <SelectTrigger><SelectValue placeholder="Select a credit card" /></SelectTrigger>
+                  <SelectContent>{accounts.filter((a) => a.account_type === "credit_card").map((card) => <SelectItem key={card.id} value={card.id}>{card.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
+            {category === "CC Bill" && (
+              <div className="mt-3">
+                <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Paid from family account</Label>
+                <Select value={familyAccountId} onValueChange={setFamilyAccountId}>
+                  <SelectTrigger><SelectValue placeholder="Select family account" /></SelectTrigger>
+                  <SelectContent>{accounts.filter((a) => a.account_type !== "credit_card").map((account) => <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Label className="text-xs uppercase tracking-widest text-[#5C635F] block mt-3">Credit card bill for</Label>
+                <Select value={cardId} onValueChange={setCardId}>
+                  <SelectTrigger><SelectValue placeholder="Select a credit card" /></SelectTrigger>
+                  <SelectContent>{accounts.filter((a) => a.account_type === "credit_card").map((card) => <SelectItem key={card.id} value={card.id}>{card.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
+            {isPartner && (
               <p className="text-xs text-[#5C635F] mt-2">
                 This amount will also be recorded as an investment by this partner.
               </p>
@@ -508,7 +557,7 @@ function TransactionsTable({ rows, onDelete, onEdit }) {
                     {r.note && <div className="text-xs text-[#8C938F]">{r.note}</div>}
                     {r.kind === "expense" && (
                       <div className="text-xs text-[#8C938F]">
-                        Paid from: {r.paid_from === "pocket" ? `${r.partner_name || "Partner"} (pocket)` : "Family Account"}
+                        Paid from: {r.paid_from === "pocket" ? `${r.partner_name || "Partner"} (pocket)` : r.paid_from === "credit_card" ? "Credit Card" : "Family Account"}
                       </div>
                     )}
                   </td>
@@ -555,6 +604,7 @@ export default function TransactionsPage() {
   const today = new Date();
   const [categories, setCategories] = useState([]);
   const [partners, setPartners] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [txns, setTxns] = useState([]);
   const [tab, setTab] = useState("all");
   const [filterMode, setFilterMode] = useState("month"); // "month" or "range"
@@ -569,14 +619,16 @@ export default function TransactionsPage() {
   const isAdmin = user?.role === "admin";
 
   const load = useCallback(async () => {
-    const [c, p, t] = await Promise.all([
+    const [c, p, t, a] = await Promise.all([
       api.get("/categories"),
       api.get("/users/partners"),
       api.get("/reports/transactions"),
+      api.get("/accounts"),
     ]);
     setCategories(c.data);
     setPartners(p.data);
     setTxns(t.data);
+    setAccounts(a.data);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -637,8 +689,8 @@ export default function TransactionsPage() {
           </h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <IncomeDialog categories={categories} onCreated={load} filterMode={filterMode} month={month} year={year} />
-          <ExpenseDialog categories={categories} partners={partners} onCreated={load} filterMode={filterMode} month={month} year={year}  />
+          <IncomeDialog categories={categories} accounts={accounts} onCreated={load} filterMode={filterMode} month={month} year={year} />
+          <ExpenseDialog categories={categories} accounts={accounts} partners={partners} onCreated={load} filterMode={filterMode} month={month} year={year}  />
           <InvestmentDialog partners={partners} onCreated={load}  filterMode={filterMode} month={month} year={year}  />
         </div>
       </div>
@@ -646,6 +698,7 @@ export default function TransactionsPage() {
       {editingTxn?.kind === "income" && (
         <IncomeDialog
           categories={categories}
+          accounts={accounts}
           onCreated={load}
           filterMode={filterMode}
           month={month}
@@ -658,6 +711,7 @@ export default function TransactionsPage() {
       {editingTxn?.kind === "expense" && (
         <ExpenseDialog
           categories={categories}
+          accounts={accounts}
           partners={partners}
           onCreated={load}
           filterMode={filterMode}
