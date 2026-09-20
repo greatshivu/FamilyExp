@@ -65,7 +65,11 @@ function downloadPdf(title, columns, rows, filename) {
 
 export default function ReportsPage() {
   const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
   const [year, setYear] = useState(currentYear);
+  const [categoryView, setCategoryView] = useState("monthly");
+  const [categoryYear, setCategoryYear] = useState(currentYear);
+  const [categoryMonth, setCategoryMonth] = useState(currentMonth);
   const [monthly, setMonthly] = useState([]);
   const [partnerInv, setPartnerInv] = useState([]);
   const [incomeBreak, setIncomeBreak] = useState([]);
@@ -76,8 +80,8 @@ export default function ReportsPage() {
     const [m, pi, ib, eb, s] = await Promise.all([
       api.get(`/reports/monthly?year=${year}`),
       api.get("/reports/partner-investments"),
-      api.get(`/reports/category-breakdown?type=income&year=${year}`),
-      api.get(`/reports/category-breakdown?type=expense&year=${year}`),
+      api.get(`/reports/category-breakdown?type=income&year=${categoryYear}${categoryView === "monthly" ? `&month=${categoryMonth}` : ""}`),
+      api.get(`/reports/category-breakdown?type=expense&year=${categoryYear}${categoryView === "monthly" ? `&month=${categoryMonth}` : ""}`),
       api.get("/reports/summary"),
     ]);
     setMonthly(
@@ -90,7 +94,7 @@ export default function ReportsPage() {
     setIncomeBreak(ib.data);
     setExpenseBreak(eb.data);
     setSummary(s.data);
-  }, [year]);
+  }, [year, categoryView, categoryYear, categoryMonth]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -129,16 +133,23 @@ export default function ReportsPage() {
     );
   }
   function exportBreakdownCsv(type, rows) {
-    downloadCsv(rows.map((r) => ({ Category: r.category, Amount: r.amount })), `${type}-breakdown-${year}.csv`);
+    downloadCsv(rows.map((r) => ({ Category: r.category, Amount: r.amount })), `${type}-breakdown-${categoryPeriodLabel}.csv`);
   }
   function exportBreakdownPdf(type, rows) {
     downloadPdf(
-      `${type === "income" ? "Income" : "Expense"} by Category — ${year}`,
+      `${type === "income" ? "Income" : "Expense"} by Category — ${categoryPeriodLabel}`,
       ["Category", "Amount (INR)"],
       rows.map((r) => [r.category, r.amount.toFixed(2)]),
-      `${type}-breakdown-${year}.pdf`
+      `${type}-breakdown-${categoryPeriodLabel}.pdf`
     );
   }
+
+  const categoryPeriodLabel = categoryView === "monthly"
+    ? `${categoryYear}-${String(categoryMonth).padStart(2, "0")}`
+    : String(categoryYear);
+  const categoryPeriodText = categoryView === "monthly"
+    ? new Date(categoryYear, categoryMonth - 1, 1).toLocaleString("en-IN", { month: "long", year: "numeric" })
+    : String(categoryYear);
 
   return (
     <div className="space-y-6" data-testid="reports-page">
@@ -286,14 +297,52 @@ export default function ReportsPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="breakdown" className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="breakdown" className="mt-4 space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <Label className="text-xs uppercase tracking-widest text-[#5C635F]">View</Label>
+              <Select value={categoryView} onValueChange={setCategoryView}>
+                <SelectTrigger className="w-32" data-testid="category-period-select"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="yearly">Yearly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {categoryView === "monthly" && (
+              <div>
+                <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Month</Label>
+                <Select value={String(categoryMonth)} onValueChange={(v) => setCategoryMonth(Number(v))}>
+                  <SelectTrigger className="w-36" data-testid="category-month-select"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                      <SelectItem key={month} value={String(month)}>
+                        {new Date(2000, month - 1, 1).toLocaleString("en-IN", { month: "long" })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div>
+              <Label className="text-xs uppercase tracking-widest text-[#5C635F]">Year</Label>
+              <Select value={String(categoryYear)} onValueChange={(v) => setCategoryYear(Number(v))}>
+                <SelectTrigger className="w-32" data-testid="category-year-select"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[
             { title: "Income by Category", data: incomeBreak, type: "income" },
             { title: "Expense by Category", data: expenseBreak, type: "expense" },
           ].map((sec) => (
             <div key={sec.type} className="bg-white border border-[#DCD7CB] rounded-md p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-display text-xl font-bold text-[#2D4C3B]">{sec.title}</h3>
+                <h3 className="font-display text-xl font-bold text-[#2D4C3B]">{sec.title} · {categoryPeriodText}</h3>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => exportBreakdownCsv(sec.type, sec.data)} data-testid={`${sec.type}-csv-btn`}>
                     <Download className="w-3.5 h-3.5 mr-1" /> CSV
@@ -304,7 +353,7 @@ export default function ReportsPage() {
                 </div>
               </div>
               {sec.data.length === 0 ? (
-                <div className="text-[#5C635F] text-sm">No entries for {year}.</div>
+                <div className="text-[#5C635F] text-sm">No entries for {categoryPeriodText}.</div>
               ) : (
                 <>
                   <div className="h-64">
@@ -331,6 +380,7 @@ export default function ReportsPage() {
               )}
             </div>
           ))}
+          </div>
         </TabsContent>
 
         <TabsContent value="totals" className="mt-4">
