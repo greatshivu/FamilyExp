@@ -29,8 +29,13 @@ Application and audit databases may use the same MongoDB server, but they should
 Optional values:
 
 ```dotenv
-# Comma-separated browser origins. The code defaults to "*" for development.
+# Comma-separated browser origins. Credentials require explicit origins.
 CORS_ORIGINS=http://localhost:3000
+
+# Set production to enable secure auth cookies by default.
+ENVIRONMENT=production
+# Override cookie security only for local HTTP development.
+COOKIE_SECURE=true
 
 # Used in approval and password-reset links.
 FRONTEND_URL=http://localhost:3000
@@ -64,7 +69,7 @@ Service endpoints:
 - ReDoc: `http://localhost:8000/redoc`
 - Health: `GET /health`
 - Detailed health: `GET /health/details`
-- Database health: `GET /health/db`
+- Database health: `GET /health/db` (admin authentication required)
 - API routes: `/api/*`
 
 ## API areas
@@ -106,4 +111,4 @@ For Render, use:
 - Start command: `uvicorn server:app --host 0.0.0.0 --port $PORT`
 - Health check path: `/health`
 
-Set all required environment variables in the hosting provider. Set `CORS_ORIGINS` to the exact frontend origin and `FRONTEND_URL` to the public frontend URL.
+Set all required environment variables in the hosting provider. Set `ENVIRONMENT=production`, use a strong unique `JWT_SECRET`, set `COOKIE_SECURE=true`, set `CORS_ORIGINS` to the exact frontend origin (wildcards are rejected), and set `FRONTEND_URL` to the public frontend URL. `/health` remains public for the platform health check; detailed and database health endpoints require an admin session.

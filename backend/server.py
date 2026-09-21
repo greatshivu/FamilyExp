@@ -16,6 +16,7 @@ from typing import List, Optional, Literal
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, BackgroundTasks
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 import psutil
 import socket
@@ -39,6 +40,16 @@ JWT_ALGORITHM = "HS256"
 ACCESS_MIN = 60 * 24
 REFRESH_DAYS = 30
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
+IS_PRODUCTION = ENVIRONMENT in {"production", "prod"}
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true" if IS_PRODUCTION else "false").lower() == "true"
+if IS_PRODUCTION and len(JWT_SECRET) < 32:
+    raise RuntimeError("JWT_SECRET must be at least 32 characters in production")
+if IS_PRODUCTION and not COOKIE_SECURE:
+    raise RuntimeError("COOKIE_SECURE must be true in production")
+if IS_PRODUCTION and (not os.environ.get("ADMIN_EMAIL") or not os.environ.get("ADMIN_PASSWORD")):
+    raise RuntimeError("ADMIN_EMAIL and ADMIN_PASSWORD must be configured in production")
 PASSWORD_HELP = "Password must be at least 8 characters and include a letter, a number, and a special character."
 
 PASSWORD_RE_LETTER = re.compile(r"[A-Za-z]")
@@ -50,7 +61,12 @@ def validate_password(pw: str) -> None:
             or not PASSWORD_RE_SPECIAL.search(pw):
         raise HTTPException(status_code=400, detail=PASSWORD_HELP)
 
-app = FastAPI(title="Family Exponse")
+app = FastAPI(
+    title="Family Exponse",
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
+)
 api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -70,14 +86,17 @@ def verify_password(pw: str, hashed: str) -> bool:
 
 
 def get_jwt_secret() -> str:
-    return os.environ["JWT_SECRET"]
+    if not JWT_SECRET:
+        raise RuntimeError("JWT_SECRET is not configured")
+    return JWT_SECRET
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def create_access_token(user_id: str, email: str, session_version: int = 0) -> str:
     payload = {
         "sub": user_id,
         "email": email,
         "type": "access",
+        "session_version": session_version,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=ACCESS_MIN),
     }
     return pyjwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
@@ -93,9 +112,9 @@ def create_refresh_token(user_id: str) -> str:
 
 
 def set_auth_cookies(resp: Response, access: str, refresh: str):
-    resp.set_cookie("access_token", access, httponly=True, secure=False, samesite="lax",
+    resp.set_cookie("access_token", access, httponly=True, secure=COOKIE_SECURE, samesite="lax",
                     max_age=ACCESS_MIN * 60, path="/")
-    resp.set_cookie("refresh_token", refresh, httponly=True, secure=False, samesite="lax",
+    resp.set_cookie("refresh_token", refresh, httponly=True, secure=COOKIE_SECURE, samesite="lax",
                     max_age=REFRESH_DAYS * 86400, path="/")
 
 
@@ -119,6 +138,8 @@ async def get_current_user(request: Request) -> dict:
         user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        if payload.get("session_version", 0) != user.get("session_version", 0):
+            raise HTTPException(status_code=401, detail="Session expired")
         if user.get("status") != "approved":
             raise HTTPException(status_code=403, detail="Account is not approved")
         return user
@@ -141,9 +162,9 @@ def utc_now_iso() -> str:
 
 class RegisterIn(BaseModel):
     email: EmailStr
-    password: str
-    name: str
-    phone: Optional[str] = None
+    password: str = Field(min_length=8, max_length=256)
+    name: str = Field(min_length=1, max_length=200)
+    phone: Optional[str] = Field(default=None, max_length=50)
 
 
 class LoginIn(BaseModel):
@@ -164,8 +185,8 @@ class UserOut(BaseModel):
 
 
 class ProfileUpdateIn(BaseModel):
-    name: str
-    phone: Optional[str] = None
+    name: str = Field(min_length=1, max_length=200)
+    phone: Optional[str] = Field(default=None, max_length=50)
     currency: Optional[Literal["INR", "USD"]] = None
 
 
@@ -175,9 +196,9 @@ class PasswordChangeIn(BaseModel):
 
 
 class AdminUserEditIn(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=200)
     email: Optional[EmailStr] = None
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(default=None, max_length=50)
 
 
 class ForgotPasswordIn(BaseModel):
@@ -185,8 +206,8 @@ class ForgotPasswordIn(BaseModel):
 
 
 class ResetPasswordIn(BaseModel):
-    token: str
-    new_password: str
+    token: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
 
 
 class DeletionRequestIn(BaseModel):
@@ -196,10 +217,10 @@ class DeletionRequestIn(BaseModel):
 
 
 class PartnerIn(BaseModel):
-    name: str
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    note: Optional[str] = None
+    name: str = Field(min_length=1, max_length=200)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[str] = Field(default=None, max_length=320)
+    note: Optional[str] = Field(default=None, max_length=5000)
 
 
 class Partner(BaseModel):
@@ -212,7 +233,7 @@ class Partner(BaseModel):
 
 
 class CategoryIn(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=100)
     type: Literal["income", "expense"]
 
 
@@ -224,11 +245,11 @@ class Category(BaseModel):
 
 
 class IncomeIn(BaseModel):
-    category: str
-    amount: float
-    date: str  # YYYY-MM-DD
-    note: Optional[str] = None
-    attachment: Optional[str] = None
+    category: str = Field(min_length=1, max_length=100)
+    amount: float = Field(gt=0, le=1_000_000_000)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")  # YYYY-MM-DD
+    note: Optional[str] = Field(default=None, max_length=5000)
+    attachment: Optional[str] = Field(default=None, max_length=15_000_000)
     account_id: Optional[str] = None
 
 
@@ -246,13 +267,13 @@ class Income(BaseModel):
 
 
 class ExpenseIn(BaseModel):
-    category: str
-    amount: float
-    date: str
-    note: Optional[str] = None
+    category: str = Field(min_length=1, max_length=100)
+    amount: float = Field(gt=0, le=1_000_000_000)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    note: Optional[str] = Field(default=None, max_length=5000)
     paid_from: Literal["account", "pocket", "credit_card"]
     partner_id: Optional[str] = None  # required if paid_from == pocket
-    attachment: Optional[str] = None
+    attachment: Optional[str] = Field(default=None, max_length=15_000_000)
     account_id: Optional[str] = None
     family_account_id: Optional[str] = None
 
@@ -276,10 +297,10 @@ class Expense(BaseModel):
 
 class InvestmentIn(BaseModel):
     partner_id: str
-    amount: float
-    date: str
-    note: Optional[str] = None
-    attachment: Optional[str] = None
+    amount: float = Field(gt=0, le=1_000_000_000)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    note: Optional[str] = Field(default=None, max_length=5000)
+    attachment: Optional[str] = Field(default=None, max_length=15_000_000)
 
 
 class Investment(BaseModel):
@@ -297,7 +318,7 @@ class Investment(BaseModel):
 
 
 class NoteIn(BaseModel):
-    content: str
+    content: str = Field(max_length=20_000)
 
 
 class Note(BaseModel):
@@ -309,7 +330,7 @@ class Note(BaseModel):
 
 
 class ReplyIn(BaseModel):
-    content: str
+    content: str = Field(max_length=20_000)
 
 
 class Reply(BaseModel):
@@ -321,7 +342,7 @@ class Reply(BaseModel):
 
 
 class CommonNoteIn(BaseModel):
-    content: str
+    content: str = Field(max_length=20_000)
 
 
 class CommonNote(BaseModel):
@@ -335,8 +356,8 @@ class CommonNote(BaseModel):
 
 
 class FarmUpdateIn(BaseModel):
-    image: str  # base64 compressed
-    note: Optional[str] = None
+    image: str = Field(max_length=15_000_000)  # base64 compressed
+    note: Optional[str] = Field(default=None, max_length=5000)
 
 
 class FarmUpdate(BaseModel):
@@ -362,10 +383,10 @@ class AuditLog(BaseModel):
 
 
 class BankAccountIn(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=200)
     account_type: Literal["bank", "cash", "credit_card", "wallet", "investment"]
-    balance: float
-    opening_balance: Optional[float] = None
+    balance: float = Field(ge=-1_000_000_000, le=1_000_000_000)
+    opening_balance: Optional[float] = Field(default=None, ge=-1_000_000_000, le=1_000_000_000)
 
 
 class BankAccount(BaseModel):
@@ -381,9 +402,9 @@ class BankAccount(BaseModel):
 
 class SavingsIn(BaseModel):
     account_id: str
-    amount: float
-    date: str
-    note: Optional[str] = None
+    amount: float = Field(gt=0, le=1_000_000_000)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    note: Optional[str] = Field(default=None, max_length=5000)
     source: Literal["manual", "income", "expense"] = "manual"
 
 
@@ -527,7 +548,7 @@ def health():
     return {"status": "ok"}
 
 @app.get("/health/details")
-def health_details():
+def health_details(_: dict = Depends(get_admin_user)):
     return {
         "status": "ok",
         "hostname": socket.gethostname(),
@@ -537,13 +558,13 @@ def health_details():
     }
 
 @app.get("/health/db")
-async def health_db():
+async def health_db(_: dict = Depends(get_admin_user)):
     try:
-        # MongoDB ping command
-        result = await db.command("ping")
-        return {"database": "connected", "result": result}
+        await db.command("ping")
+        return {"database": "connected"}
     except Exception as e:
-        return {"database": "error", "details": str(e)}
+        logger.warning("Database health check failed: %s", type(e).__name__)
+        return {"database": "error"}
 
 # ---------------- Auth routes ----------------
 @api.post("/auth/register")
@@ -578,7 +599,6 @@ async def register(payload: RegisterIn, background: BackgroundTasks):
 
 @api.post("/auth/login", response_model=UserOut)
 async def login(payload: LoginIn, response: Response):
-    print("CORS_ORIGINS:", os.environ.get("CORS_ORIGINS"))
     email = payload.email.lower()
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(payload.password, user["password_hash"]):
@@ -590,7 +610,7 @@ async def login(payload: LoginIn, response: Response):
         raise HTTPException(status_code=403, detail="Your account has been rejected. Contact the admin.")
     if status != "approved":
         raise HTTPException(status_code=403, detail="Account is not active.")
-    access = create_access_token(user["id"], email)
+    access = create_access_token(user["id"], email, user.get("session_version", 0))
     refresh = create_refresh_token(user["id"])
     set_auth_cookies(response, access, refresh)
     user.pop("_id", None)
@@ -600,6 +620,7 @@ async def login(payload: LoginIn, response: Response):
 
 @api.post("/auth/logout")
 async def logout(response: Response, _: dict = Depends(get_current_user)):
+    await db.users.update_one({"id": _["id"]}, {"$inc": {"session_version": 1}})
     clear_auth_cookies(response)
     return {"ok": True}
 
@@ -631,7 +652,8 @@ async def change_password(payload: PasswordChangeIn, user: dict = Depends(get_cu
     if not full or not verify_password(payload.current_password, full["password_hash"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     await db.users.update_one(
-        {"id": user["id"]}, {"$set": {"password_hash": hash_password(payload.new_password)}}
+        {"id": user["id"]},
+        {"$set": {"password_hash": hash_password(payload.new_password)}, "$inc": {"session_version": 1}},
     )
     return {"ok": True}
 
@@ -651,25 +673,25 @@ async def forgot_password(payload: ForgotPasswordIn, background: BackgroundTasks
         })
         reset_url = f"{FRONTEND_URL}/reset-password?token={token}"
         background.add_task(email_password_reset, email, user.get("name", "there"), reset_url)
-        logger.info(f"Password reset link for {email}: {reset_url}")
     return {"ok": True, "message": "If the email exists, a reset link has been sent."}
 
 
 @api.post("/auth/reset-password")
 async def reset_password(payload: ResetPasswordIn):
     validate_password(payload.new_password)
-    rec = await db.password_reset_tokens.find_one({"token": payload.token, "used": False})
+    now = datetime.now(timezone.utc)
+    rec = await db.password_reset_tokens.find_one_and_update(
+        {"token": payload.token, "used": False, "expires_at": {"$gt": now}},
+        {"$set": {"used": True, "used_at": now}},
+        projection={"_id": 0},
+        return_document=ReturnDocument.BEFORE,
+    )
     if not rec:
         raise HTTPException(status_code=400, detail="Invalid or already used reset token")
-    exp = rec.get("expires_at")
-    if isinstance(exp, datetime) and exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    if exp and exp < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Reset token has expired")
     await db.users.update_one(
-        {"id": rec["user_id"]}, {"$set": {"password_hash": hash_password(payload.new_password)}}
+        {"id": rec["user_id"]},
+        {"$set": {"password_hash": hash_password(payload.new_password)}, "$inc": {"session_version": 1}},
     )
-    await db.password_reset_tokens.update_one({"token": payload.token}, {"$set": {"used": True}})
     return {"ok": True}
 
 
@@ -739,7 +761,6 @@ async def admin_send_reset_link(user_id: str, background: BackgroundTasks, _: di
     })
     reset_url = f"{FRONTEND_URL}/reset-password?token={token}"
     background.add_task(email_password_reset, user["email"], user.get("name", "there"), reset_url)
-    logger.info(f"Admin-triggered reset link for {user['email']}: {reset_url}")
     return {"ok": True, "reset_url": reset_url}
 
 
@@ -1749,10 +1770,18 @@ async def list_audits(_: dict = Depends(get_current_user)):
 # ---------------- Mount ----------------
 app.include_router(api)
 
+configured_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
+    if origin.strip()
+]
+if "*" in configured_origins:
+    raise RuntimeError("CORS_ORIGINS must contain explicit origins when credentials are enabled")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=configured_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
