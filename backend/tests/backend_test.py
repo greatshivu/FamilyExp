@@ -408,6 +408,7 @@ class TestPartnersDropdown:
 
 class TestIncomesExpensesInvestments:
     def test_credit_card_purchase_and_bill_payment_reconcile(self, admin):
+        before_summary = admin.get(f"{API}/reports/summary").json()
         card = admin.post(f"{API}/accounts", json={
             "name": f"Test Card {uuid.uuid4().hex[:6]}",
             "account_type": "credit_card",
@@ -441,9 +442,17 @@ class TestIncomesExpensesInvestments:
         assert payment.status_code == 200, payment.text
         refreshed = next(a for a in admin.get(f"{API}/accounts").json() if a["id"] == card_id)
         assert refreshed["balance"] == 150
+        family_balance = next(a for a in admin.get(f"{API}/accounts").json() if a["id"] == family_id)
+        assert family_balance["balance"] == 9900
         ledger = admin.get(f"{API}/credit-cards/{card_id}/transactions", params={"year": 2026, "month": "02"})
         assert ledger.status_code == 200, ledger.text
         assert {row["type"] for row in ledger.json()["transactions"]} == {"purchase", "payment"}
+        transaction_report = admin.get(f"{API}/reports/transactions").json()
+        assert not any(row["id"] == payment.json()["id"] for row in transaction_report)
+        after_summary = admin.get(f"{API}/reports/summary").json()
+        assert after_summary["total_expense"] - before_summary["total_expense"] == 250
+        breakdown = admin.get(f"{API}/reports/category-breakdown", params={"type": "expense", "year": 2026}).json()
+        assert not any(row["category"] == "CC Bill" for row in breakdown)
 
         admin.delete(f"{API}/expenses/{purchase.json()['id']}")
         admin.delete(f"{API}/expenses/{payment.json()['id']}")

@@ -979,6 +979,12 @@ def _card_balance_delta(expense: dict) -> float:
     return 0
 
 
+def _family_account_delta(expense: dict) -> float:
+    if expense.get("category") == "CC Bill" and expense.get("family_account_id"):
+        return -float(expense.get("amount", 0))
+    return 0
+
+
 # ---------------- Incomes ----------------
 @api.get("/incomes")
 async def list_incomes(_: dict = Depends(get_current_user)):
@@ -1082,6 +1088,7 @@ async def create_expense(payload: ExpenseIn, user: dict = Depends(get_current_us
         await create_audit(user, "Add", "investment", inv_id, payload.amount, payload.date, "Auto-Expense")
 
     await _adjust_credit_card(payload.account_id, _card_balance_delta(exp_doc))
+    await _adjust_credit_card(payload.family_account_id, _family_account_delta(exp_doc))
 
     return exp_doc
 
@@ -1098,6 +1105,7 @@ async def delete_expense(expense_id: str, user: dict = Depends(get_admin_user)):
     if existing:
         await create_audit(user, "Delete", "expense", expense_id, existing["amount"], existing["date"], existing["category"])
         await _adjust_credit_card(existing.get("account_id"), -_card_balance_delta(existing))
+        await _adjust_credit_card(existing.get("family_account_id"), -_family_account_delta(existing))
     
     await db.expenses.delete_one({"id": expense_id})
     await db.deletion_requests.delete_many({"resource_type": "expense", "resource_id": expense_id})
@@ -1120,6 +1128,7 @@ async def update_expense(expense_id: str, payload: ExpenseIn, user: dict = Depen
     await _validate_expense_account(payload)
 
     await _adjust_credit_card(existing.get("account_id"), -_card_balance_delta(existing))
+    await _adjust_credit_card(existing.get("family_account_id"), -_family_account_delta(existing))
 
     update_data = payload.model_dump()
     update_data["partner_name"] = partner_name
@@ -1151,6 +1160,7 @@ async def update_expense(expense_id: str, payload: ExpenseIn, user: dict = Depen
 
     updated = await db.expenses.find_one({"id": expense_id}, {"_id": 0})
     await _adjust_credit_card(payload.account_id, _card_balance_delta(updated))
+    await _adjust_credit_card(payload.family_account_id, _family_account_delta(updated))
     return updated
 
 
@@ -1224,7 +1234,10 @@ async def update_investment(inv_id: str, payload: InvestmentIn, user: dict = Dep
 @api.get("/reports/summary")
 async def report_summary(_: dict = Depends(get_current_user)):
     incomes = await db.incomes.find({}, {"_id": 0, "amount": 1, "paid_from": 1}).to_list(10000)
-    expenses = await db.expenses.find({}, {"_id": 0, "amount": 1, "paid_from": 1}).to_list(10000)
+    expenses = await db.expenses.find(
+        {"category": {"$ne": "CC Bill"}},
+        {"_id": 0, "amount": 1, "paid_from": 1},
+    ).to_list(10000)
     investments = await db.investments.find({}, {"_id": 0, "amount": 1}).to_list(10000)
 
     total_income = sum(i["amount"] for i in incomes)
@@ -1253,7 +1266,10 @@ async def report_monthly(year: int = Query(...), _: dict = Depends(get_current_u
         key = r["date"][:7]
         if key in months:
             months[key]["income"] += r["amount"]
-    async for r in db.expenses.find({"date": {"$regex": f"^{year}-"}}, {"_id": 0, "date": 1, "amount": 1}):
+    async for r in db.expenses.find(
+        {"date": {"$regex": f"^{year}-"}, "category": {"$ne": "CC Bill"}},
+        {"_id": 0, "date": 1, "amount": 1},
+    ):
         key = r["date"][:7]
         if key in months:
             months[key]["expense"] += r["amount"]
@@ -1275,6 +1291,8 @@ async def category_breakdown(
     elif year:
         q["date"] = {"$regex": f"^{year}-"}
     out = {}
+    if type == "expense":
+        q["category"] = {"$ne": "CC Bill"}
     async for r in coll.find(q, {"_id": 0, "category": 1, "amount": 1}):
         out[r["category"]] = out.get(r["category"], 0) + r["amount"]
     return [{"category": k, "amount": round(v, 2)} for k, v in sorted(out.items(), key=lambda x: -x[1])]
@@ -1329,7 +1347,7 @@ async def transactions(
             if in_range(r["date"]):
                 out.append({**r, "kind": "income", "pending_deletion": r["id"] in pending_inc})
     if type in (None, "expense"):
-        async for r in db.expenses.find({}, {"_id": 0}):
+        async for r in db.expenses.find({"category": {"$ne": "CC Bill"}}, {"_id": 0}):
             if in_range(r["date"]):
                 out.append({**r, "kind": "expense", "pending_deletion": r["id"] in pending_exp})
     if type in (None, "investment"):
@@ -1391,7 +1409,8 @@ async def report_breakdown(
 ):
     """Returns Monthly (current year), Yearly (last 5 yrs), and Total for income/expense/investment."""
     coll = {"income": db.incomes, "expense": db.expenses, "investment": db.investments}[type]
-    rows = await coll.find({}, {"_id": 0, "date": 1, "amount": 1}).to_list(20000)
+    report_query = {"category": {"$ne": "CC Bill"}} if type == "expense" else {}
+    rows = await coll.find(report_query, {"_id": 0, "date": 1, "amount": 1}).to_list(20000)
 
     now = datetime.now(timezone.utc)
     current_year = now.year

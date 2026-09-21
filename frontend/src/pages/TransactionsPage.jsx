@@ -145,19 +145,17 @@ const resetValues = (setCategory, setDate, setNote, setAmount, setAttachment, op
   const [date, setDate] = useState(filterMode === "month" ? selectedISO(month, year) : todayISO());
   const [note, setNote] = useState("");
   const [attachment, setAttachment] = useState(null);
-    const [accountId, setAccountId] = useState("");
-    setAccountId(initialValues.account_id || "");
-    setAccountId("");
-    const data = { category, amount: parseFloat(amount), date, note, attachment, account_id: accountId || null };
+  const [accountId, setAccountId] = useState("");
   
   useEffect(() => {
     resetValues(setCategory, setDate, setNote, setAmount, setAttachment, open, filterMode, month, year, transaction);
+    if (open) setAccountId(transaction?.account_id || "");
   }, [open, filterMode, month, year, transaction]);
 
   async function submit() {
     if (!category || !amount) return toast.error("Category and amount required");
     try {
-      const data = { category, amount: parseFloat(amount), date, note, attachment };
+      const data = { category, amount: parseFloat(amount), date, note, attachment, account_id: accountId || null };
       if (transaction) {
         await api.put(`/incomes/${transaction.id}`, data);
         toast.success("Income updated");
@@ -265,9 +263,10 @@ function ExpenseDialog({ categories, accounts, filterMode, month, year, partners
     }
   }, [open, filterMode, month, year, transaction]);
 
+  const isPartner = paidFromKey !== "account" && paidFromKey !== "credit_card" && !paidFromKey.startsWith("family:");
+
   async function submit() {
     if (!category || !amount) return toast.error("Category and amount required");
-    const isPartner = paidFromKey !== "account" && paidFromKey !== "credit_card" && !paidFromKey.startsWith("family:");
     const isFamilyAccount = paidFromKey === "account" || paidFromKey.startsWith("family:");
     try {
       const data = {
@@ -297,7 +296,7 @@ function ExpenseDialog({ categories, accounts, filterMode, month, year, partners
     }
   }
 
-  const expCats = categories.filter((c) => c.type === "expense");
+  const expCats = categories.filter((c) => c.type === "expense" && c.name !== "CC Bill");
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
