@@ -32,6 +32,8 @@ export default function ProfilePage() {
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [currency, setCurrency] = useState(user?.currency || "INR");
+  const [allowSso, setAllowSso] = useState(user?.allow_sso || false);
+  const [ssoLocked, setSsoLocked] = useState(user?.allow_sso || false);
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -44,8 +46,14 @@ export default function ProfilePage() {
     if (!name.trim()) return toast.error("Name cannot be empty");
     setSavingProfile(true);
     try {
-      await api.patch("/auth/profile", { name: name.trim(), phone: phone.trim() || null, currency });
+      await api.patch("/auth/profile", {
+        name: name.trim(),
+        phone: phone.trim() || null,
+        currency,
+        allow_sso: allowSso,
+      });
       await refreshUser();
+      if (allowSso) setSsoLocked(true);
       toast.success("Profile updated");
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail) || "Failed");
@@ -120,6 +128,20 @@ export default function ProfilePage() {
             {savingProfile ? "Saving…" : "Save profile"}
           </Button>
         </form>
+        <div className="border-t border-[#DCD7CB] pt-6 mt-6">
+          <h3 className="font-display text-lg font-bold text-[#2D4C3B]">Google sign-in</h3>
+          <label className="flex items-start gap-3 mt-3 text-sm text-[#5C635F]">
+            <input
+              type="checkbox"
+              checked={allowSso}
+              onChange={(e) => setAllowSso(e.target.checked)}
+              disabled={ssoLocked}
+              data-testid="profile-allow-sso-checkbox"
+              className="mt-0.5 h-4 w-4 accent-[#2D4C3B]"
+            />
+            <span>Allow signing in with Google for this account.</span>
+          </label>
+        </div>
         <div className="border-t border-[#DCD7CB] pt-6 mt-6">
           <h3 className="font-display text-lg font-bold text-[#2D4C3B]">Currency</h3>
           <p className="text-sm text-[#5C635F] mt-1 mb-3">Choose the currency used throughout the application.</p>

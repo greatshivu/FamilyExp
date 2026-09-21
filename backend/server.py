@@ -201,6 +201,7 @@ class UserOut(BaseModel):
     role: str = "partner"
     status: str = "pending"
     currency: Literal["INR", "USD"] = "INR"
+    allow_sso: bool = False
     created_at: str
 
 
@@ -208,6 +209,7 @@ class ProfileUpdateIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     phone: Optional[str] = Field(default=None, max_length=50)
     currency: Optional[Literal["INR", "USD"]] = None
+    allow_sso: Optional[bool] = None
 
 
 class PasswordChangeIn(BaseModel):
@@ -523,6 +525,10 @@ async def seed_defaults():
 
     # Backfill: any user missing status -> mark as approved (legacy data)
     await db.users.update_many({"status": {"$exists": False}}, {"$set": {"status": "approved"}})
+    await db.users.update_many(
+        {"google_sub": {"$exists": True}},
+        {"$set": {"allow_sso": True}},
+    )
 
     # Drop legacy partners collection (now unified with users)
     try:
@@ -601,6 +607,7 @@ async def register(payload: RegisterIn, background: BackgroundTasks):
         "role": "partner",
         "status": "pending",
         "currency": "INR",
+        "allow_sso": False,
         "password_hash": hash_password(payload.password),
         "created_at": utc_now_iso(),
     }
@@ -715,28 +722,41 @@ async def google_callback(
         return _frontend_auth_redirect("Google sign-in did not provide a verified email.")
 
     user = await db.users.find_one({"google_sub": google_sub})
+    if user and not user.get("allow_sso", False):
+        await db.users.update_one({"id": user["id"]}, {"$set": {"allow_sso": True}})
+        user["allow_sso"] = True
     if not user:
         existing_email = await db.users.find_one({"email": email})
         if existing_email:
-            return _frontend_auth_redirect(
-                "An account with this email already exists. Sign in with your password."
+            if not existing_email.get("allow_sso", False):
+                return _frontend_auth_redirect(
+                    "An account with this email already exists. Sign in with your password."
+                )
+            await db.users.update_one(
+                {"id": existing_email["id"]},
+                {"$set": {"google_sub": google_sub, "allow_sso": True}},
             )
-        user = {
-            "id": str(uuid.uuid4()),
-            "email": email,
-            "name": name or "Google User",
-            "phone": None,
-            "role": "partner",
-            "status": "pending",
-            "currency": "INR",
-            "google_sub": google_sub,
-            "created_at": utc_now_iso(),
-        }
-        await db.users.insert_one(user)
-        background.add_task(email_account_created, email, user["name"])
-        admins = await db.users.find({"role": "admin"}, {"_id": 0, "email": 1}).to_list(50)
-        for admin in admins:
-            background.add_task(email_admin_new_signup, admin["email"], user["name"], email, FRONTEND_URL)
+            existing_email["google_sub"] = google_sub
+            existing_email["allow_sso"] = True
+            user = existing_email
+        else:
+            user = {
+                "id": str(uuid.uuid4()),
+                "email": email,
+                "name": name or "Google User",
+                "phone": None,
+                "role": "partner",
+                "status": "pending",
+                "currency": "INR",
+                "allow_sso": True,
+                "google_sub": google_sub,
+                "created_at": utc_now_iso(),
+            }
+            await db.users.insert_one(user)
+            background.add_task(email_account_created, email, user["name"])
+            admins = await db.users.find({"role": "admin"}, {"_id": 0, "email": 1}).to_list(50)
+            for admin in admins:
+                background.add_task(email_admin_new_signup, admin["email"], user["name"], email, FRONTEND_URL)
 
     if user.get("status") == "rejected":
         return _frontend_auth_redirect("Your account was not approved. Please contact the admin.")
@@ -773,6 +793,10 @@ async def update_profile(payload: ProfileUpdateIn, user: dict = Depends(get_curr
         "phone": (payload.phone or "").strip() or None,
         "currency": payload.currency or user.get("currency", "INR"),
     }
+    if user.get("google_sub") or user.get("allow_sso", False):
+        updates["allow_sso"] = True
+    elif payload.allow_sso is not None:
+        updates["allow_sso"] = payload.allow_sso
     await db.users.update_one({"id": user["id"]}, {"$set": updates})
     user.update(updates)
     return UserOut(**user)
