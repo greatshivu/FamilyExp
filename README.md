@@ -16,7 +16,7 @@ The frontend calls the backend at `${REACT_APP_BACKEND_URL}/api`. Authentication
 
 ## Main capabilities
 
-- Registration, administrator approval/rejection, login, logout, password reset, and idle logout.
+- Registration, Google/password login, administrator approval/rejection, logout, password reset, and idle logout. New Google accounts also require administrator approval before access.
 - Profile updates for name, phone, and preferred currency.
 - Per-user currency preference: `INR` or `USD`, defaulting to INR. The saved preference is applied throughout monetary displays and does not convert stored numeric amounts.
 - Income, expense, and investment tracking with categories, dates, notes, attachments, and partner pocket investments.
@@ -44,6 +44,8 @@ REACT_APP_BACKEND_URL=http://localhost:8000
 ```
 
 `REACT_APP_BACKEND_URL` must be the backend origin without the `/api` suffix. The frontend adds `/api` itself.
+
+Google SSO is configured only on the backend. Set the Google OAuth variables documented in [backend/README.md](backend/README.md), and register `${BACKEND_URL}/api/auth/google/callback` as an exact Google Cloud authorized redirect URI.
 
 ## Local development
 

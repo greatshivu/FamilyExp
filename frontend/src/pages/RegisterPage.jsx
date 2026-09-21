@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { api, API } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +36,13 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+
+  React.useEffect(() => {
+    api.get("/auth/google/status")
+      .then(({ data }) => setGoogleEnabled(Boolean(data?.enabled)))
+      .catch(() => setGoogleEnabled(false));
+  }, []);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -89,6 +97,25 @@ export default function RegisterPage() {
               {loading ? "Creating…" : "Create account"}
             </Button>
           </form>
+
+          {googleEnabled && (
+            <>
+              <div className="flex items-center gap-3 my-5 text-xs uppercase tracking-widest text-[#8C938F]">
+                <div className="h-px flex-1 bg-[#DCD7CB]" />
+                <span>or</span>
+                <div className="h-px flex-1 bg-[#DCD7CB]" />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { window.location.href = `${API}/auth/google/login`; }}
+                className="w-full h-11 bg-white border-[#DCD7CB] text-[#1C1F1D] hover:bg-[#E8E5DC] font-semibold"
+                data-testid="google-register-btn"
+              >
+                Continue with Google
+              </Button>
+            </>
+          )}
 
           <p className="text-sm text-[#5C635F] mt-6 text-center">
             Already have an account?{" "}
