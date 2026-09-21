@@ -18,6 +18,7 @@ import {
     Camera,
     Wallet,
     PiggyBank,
+    CreditCard,
 } from "lucide-react";
 
 const groupedBaseNav = [
@@ -43,6 +44,7 @@ const groupedBaseNav = [
         children: [
             { to: "/accounts", label: "Accounts", icon: Wallet, testid: "nav-accounts" },
             { to: "/savings", label: "Savings", icon: PiggyBank, testid: "nav-savings" },
+            { to: "/credit-cards", label: "Credit cards", icon: CreditCard, testid: "nav-credit-cards" },
         ],
     },
     {
@@ -97,6 +99,7 @@ export default function AppLayout({ children }) {
     const { user, logout } = useAuth();
     const [openMenu, setOpenMenu] = useState(null);
     const navigate = useNavigate();
+    const location = useLocation();
 
     // const navItems = user?.role === "admin"
     //   ? [...baseNav.slice(0, 4), ...adminExtras, ...baseNav.slice(4)]

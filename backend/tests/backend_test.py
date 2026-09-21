@@ -407,6 +407,58 @@ class TestPartnersDropdown:
 
 
 class TestIncomesExpensesInvestments:
+    def test_credit_card_purchase_and_bill_payment_reconcile(self, admin):
+        before_summary = admin.get(f"{API}/reports/summary").json()
+        card = admin.post(f"{API}/accounts", json={
+            "name": f"Test Card {uuid.uuid4().hex[:6]}",
+            "account_type": "credit_card",
+            "balance": 0,
+            "opening_balance": 0,
+        })
+        assert card.status_code == 200, card.text
+        card_id = card.json()["id"]
+        family = admin.post(f"{API}/accounts", json={
+            "name": f"Test Family {uuid.uuid4().hex[:6]}",
+            "account_type": "bank",
+            "balance": 10000,
+            "opening_balance": 10000,
+        })
+        assert family.status_code == 200, family.text
+        family_id = family.json()["id"]
+
+        purchase = admin.post(f"{API}/expenses", json={
+            "category": "Shopping", "amount": 250, "date": "2026-02-10",
+            "paid_from": "credit_card", "account_id": card_id,
+        })
+        assert purchase.status_code == 200, purchase.text
+        after_purchase = next(a for a in admin.get(f"{API}/accounts").json() if a["id"] == card_id)
+        assert after_purchase["balance"] == 250
+
+        payment = admin.post(f"{API}/expenses", json={
+            "category": "CC Bill", "amount": 100, "date": "2026-02-20",
+            "paid_from": "account", "account_id": card_id,
+            "family_account_id": family_id,
+        })
+        assert payment.status_code == 200, payment.text
+        refreshed = next(a for a in admin.get(f"{API}/accounts").json() if a["id"] == card_id)
+        assert refreshed["balance"] == 150
+        family_balance = next(a for a in admin.get(f"{API}/accounts").json() if a["id"] == family_id)
+        assert family_balance["balance"] == 9900
+        ledger = admin.get(f"{API}/credit-cards/{card_id}/transactions", params={"year": 2026, "month": "02"})
+        assert ledger.status_code == 200, ledger.text
+        assert {row["type"] for row in ledger.json()["transactions"]} == {"purchase", "payment"}
+        transaction_report = admin.get(f"{API}/reports/transactions").json()
+        assert not any(row["id"] == payment.json()["id"] for row in transaction_report)
+        after_summary = admin.get(f"{API}/reports/summary").json()
+        assert after_summary["total_expense"] - before_summary["total_expense"] == 250
+        breakdown = admin.get(f"{API}/reports/category-breakdown", params={"type": "expense", "year": 2026}).json()
+        assert not any(row["category"] == "CC Bill" for row in breakdown)
+
+        admin.delete(f"{API}/expenses/{purchase.json()['id']}")
+        admin.delete(f"{API}/expenses/{payment.json()['id']}")
+        admin.delete(f"{API}/accounts/{card_id}")
+        admin.delete(f"{API}/accounts/{family_id}")
+
     def test_income_crud(self, admin):
         r = admin.post(f"{API}/incomes", json={"category": "Milk", "amount": 100,
                                                "date": "2026-01-15"})
