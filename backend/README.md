@@ -40,6 +40,12 @@ COOKIE_SECURE=true
 # Used in approval and password-reset links.
 FRONTEND_URL=http://localhost:3000
 
+# Google OAuth web client credentials. Leave unset to hide Google SSO buttons.
+BACKEND_URL=http://localhost:8000
+GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
+
 # First admin created during startup. Defaults exist for development only.
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=replace-with-a-strong-password
@@ -77,6 +83,7 @@ Service endpoints:
 The API is mounted under `/api` and requires authentication for protected resources.
 
 - `/auth/*`: registration, login, logout, profile, password changes, and password reset.
+- `/auth/google/*`: Google sign-in start, callback, and configuration status.
 - `/admin/*`: user approval, rejection, editing, reset links, and deletion.
 - `/deletion-requests/*`: partner deletion requests and admin decisions.
 - `/users/partners`, `/partners`: partner data.
@@ -112,3 +119,11 @@ For Render, use:
 - Health check path: `/health`
 
 Set all required environment variables in the hosting provider. Set `ENVIRONMENT=production`, use a strong unique `JWT_SECRET`, set `COOKIE_SECURE=true`, set `CORS_ORIGINS` to the exact frontend origin (wildcards are rejected), and set `FRONTEND_URL` to the public frontend URL. `/health` remains public for the platform health check; detailed and database health endpoints require an admin session.
+
+### Google SSO setup
+
+1. In Google Cloud Console, configure an OAuth consent screen and create a **Web application** OAuth client.
+2. Add the exact backend callback URL to **Authorized redirect URIs**: `${BACKEND_URL}/api/auth/google/callback`.
+3. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BACKEND_URL`, and `GOOGLE_REDIRECT_URI` in the backend environment. Do not expose the client secret in frontend variables.
+4. A first-time Google sign-in creates a partner account with `status=pending`, sends the normal signup notifications, and redirects to the existing approval message. The user cannot receive session cookies or access the application until an administrator approves the account.
+5. An existing account is matched only by its stored Google subject. Google cannot silently attach itself to an unrelated password account with the same email address; that user must continue using the existing password flow.

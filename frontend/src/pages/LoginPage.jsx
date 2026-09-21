@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { api, API } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+
+  React.useEffect(() => {
+    api.get("/auth/google/status")
+      .then(({ data }) => setGoogleEnabled(Boolean(data?.enabled)))
+      .catch(() => setGoogleEnabled(false));
+  }, []);
+
+  const googleMessage = new URLSearchParams(location.search).get("google_message");
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -63,6 +73,12 @@ export default function LoginPage() {
             </div>
           )}
 
+          {googleMessage && (
+            <div className="mb-6 border border-[#DCD7CB] bg-[#E8E5DC] rounded-md p-3 text-sm text-[#1C1F1D]" data-testid="google-auth-message">
+              {googleMessage}
+            </div>
+          )}
+
           <form onSubmit={onSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-xs uppercase tracking-widest text-[#5C635F]">
@@ -101,6 +117,25 @@ export default function LoginPage() {
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
+
+          {googleEnabled && (
+            <>
+              <div className="flex items-center gap-3 my-5 text-xs uppercase tracking-widest text-[#8C938F]">
+                <div className="h-px flex-1 bg-[#DCD7CB]" />
+                <span>or</span>
+                <div className="h-px flex-1 bg-[#DCD7CB]" />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { window.location.href = `${API}/auth/google/login`; }}
+                className="w-full h-11 bg-white border-[#DCD7CB] text-[#1C1F1D] hover:bg-[#E8E5DC] font-semibold"
+                data-testid="google-login-btn"
+              >
+                Continue with Google
+              </Button>
+            </>
+          )}
 
           <p className="text-sm text-[#5C635F] mt-6 text-center">
             No account?{" "}

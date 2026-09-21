@@ -10,10 +10,14 @@ import secrets
 import logging
 import bcrypt
 import jwt as pyjwt
+import requests
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, BackgroundTasks
+from fastapi.responses import RedirectResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
@@ -40,6 +44,10 @@ JWT_ALGORITHM = "HS256"
 ACCESS_MIN = 60 * 24
 REFRESH_DAYS = 30
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", f"{BACKEND_URL}/api/auth/google/callback")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
 IS_PRODUCTION = ENVIRONMENT in {"production", "prod"}
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
@@ -123,6 +131,18 @@ def clear_auth_cookies(resp: Response):
     resp.delete_cookie("refresh_token", path="/")
 
 
+def _frontend_auth_redirect(message: str) -> RedirectResponse:
+    from urllib.parse import quote
+
+    redirect = RedirectResponse(f"{FRONTEND_URL}/login?google_message={quote(message)}", status_code=303)
+    redirect.delete_cookie("google_oauth_state", path="/api/auth/google")
+    return redirect
+
+
+def _google_configured() -> bool:
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI and FRONTEND_URL)
+
+
 async def get_current_user(request: Request) -> dict:
     token = request.cookies.get("access_token")
     if not token:
@@ -181,6 +201,7 @@ class UserOut(BaseModel):
     role: str = "partner"
     status: str = "pending"
     currency: Literal["INR", "USD"] = "INR"
+    allow_sso: bool = False
     created_at: str
 
 
@@ -188,6 +209,7 @@ class ProfileUpdateIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     phone: Optional[str] = Field(default=None, max_length=50)
     currency: Optional[Literal["INR", "USD"]] = None
+    allow_sso: Optional[bool] = None
 
 
 class PasswordChangeIn(BaseModel):
@@ -503,6 +525,10 @@ async def seed_defaults():
 
     # Backfill: any user missing status -> mark as approved (legacy data)
     await db.users.update_many({"status": {"$exists": False}}, {"$set": {"status": "approved"}})
+    await db.users.update_many(
+        {"google_sub": {"$exists": True}},
+        {"$set": {"allow_sso": True}},
+    )
 
     # Drop legacy partners collection (now unified with users)
     try:
@@ -581,6 +607,7 @@ async def register(payload: RegisterIn, background: BackgroundTasks):
         "role": "partner",
         "status": "pending",
         "currency": "INR",
+        "allow_sso": False,
         "password_hash": hash_password(payload.password),
         "created_at": utc_now_iso(),
     }
@@ -601,7 +628,7 @@ async def register(payload: RegisterIn, background: BackgroundTasks):
 async def login(payload: LoginIn, response: Response):
     email = payload.email.lower()
     user = await db.users.find_one({"email": email})
-    if not user or not verify_password(payload.password, user["password_hash"]):
+    if not user or not user.get("password_hash") or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     status = user.get("status", "pending")
     if status == "pending":
@@ -616,6 +643,132 @@ async def login(payload: LoginIn, response: Response):
     user.pop("_id", None)
     user.pop("password_hash", None)
     return UserOut(**user)
+
+
+@api.get("/auth/google/status")
+async def google_status():
+    return {"enabled": _google_configured()}
+
+
+@api.get("/auth/google/login")
+async def google_login(response: Response):
+    if not _google_configured():
+        return _frontend_auth_redirect("Google sign-in is not configured.")
+    state = secrets.token_urlsafe(32)
+    from urllib.parse import urlencode
+
+    params = urlencode({
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "online",
+        "prompt": "select_account",
+    })
+    redirect = RedirectResponse(
+        f"https://accounts.google.com/o/oauth2/v2/auth?{params}",
+        status_code=307,
+    )
+    redirect.set_cookie(
+        "google_oauth_state", state, httponly=True, secure=COOKIE_SECURE,
+        samesite="lax", max_age=600, path="/api/auth/google",
+    )
+    return redirect
+
+
+@api.get("/auth/google/callback")
+async def google_callback(
+    request: Request,
+    background: BackgroundTasks,
+):
+    if not _google_configured():
+        return _frontend_auth_redirect("Google sign-in is not configured.")
+    state = request.query_params.get("state")
+    state_cookie = request.cookies.get("google_oauth_state")
+    if not state or not state_cookie or not secrets.compare_digest(state, state_cookie):
+        return _frontend_auth_redirect("Google sign-in could not be verified. Please try again.")
+    if request.query_params.get("error"):
+        return _frontend_auth_redirect("Google sign-in was cancelled.")
+    code = request.query_params.get("code")
+    if not code:
+        return _frontend_auth_redirect("Google sign-in failed. Please try again.")
+
+    try:
+        token_response = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        )
+        token_response.raise_for_status()
+        token_data = token_response.json()
+        claims = id_token.verify_oauth2_token(
+            token_data["id_token"], google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+    except (requests.RequestException, KeyError, ValueError) as exc:
+        logger.warning("Google OAuth verification failed: %s", type(exc).__name__)
+        return _frontend_auth_redirect("Google sign-in failed. Please try again.")
+
+    google_sub = claims.get("sub")
+    email = (claims.get("email") or "").lower()
+    name = (claims.get("name") or email.split("@", 1)[0]).strip()[:200]
+    if not google_sub or not email or claims.get("email_verified") is not True:
+        return _frontend_auth_redirect("Google sign-in did not provide a verified email.")
+
+    user = await db.users.find_one({"google_sub": google_sub})
+    if user and not user.get("allow_sso", False):
+        await db.users.update_one({"id": user["id"]}, {"$set": {"allow_sso": True}})
+        user["allow_sso"] = True
+    if not user:
+        existing_email = await db.users.find_one({"email": email})
+        if existing_email:
+            if not existing_email.get("allow_sso", False):
+                return _frontend_auth_redirect(
+                    "An account with this email already exists. Sign in with your password."
+                )
+            await db.users.update_one(
+                {"id": existing_email["id"]},
+                {"$set": {"google_sub": google_sub, "allow_sso": True}},
+            )
+            existing_email["google_sub"] = google_sub
+            existing_email["allow_sso"] = True
+            user = existing_email
+        else:
+            user = {
+                "id": str(uuid.uuid4()),
+                "email": email,
+                "name": name or "Google User",
+                "phone": None,
+                "role": "partner",
+                "status": "pending",
+                "currency": "INR",
+                "allow_sso": True,
+                "google_sub": google_sub,
+                "created_at": utc_now_iso(),
+            }
+            await db.users.insert_one(user)
+            background.add_task(email_account_created, email, user["name"])
+            admins = await db.users.find({"role": "admin"}, {"_id": 0, "email": 1}).to_list(50)
+            for admin in admins:
+                background.add_task(email_admin_new_signup, admin["email"], user["name"], email, FRONTEND_URL)
+
+    if user.get("status") == "rejected":
+        return _frontend_auth_redirect("Your account was not approved. Please contact the admin.")
+    if user.get("status") != "approved":
+        return _frontend_auth_redirect("Your account is awaiting admin approval.")
+
+    access = create_access_token(user["id"], email, user.get("session_version", 0))
+    refresh = create_refresh_token(user["id"])
+    redirect = RedirectResponse(f"{FRONTEND_URL}/dashboard", status_code=303)
+    set_auth_cookies(redirect, access, refresh)
+    redirect.delete_cookie("google_oauth_state", path="/api/auth/google")
+    return redirect
 
 
 @api.post("/auth/logout")
@@ -640,6 +793,10 @@ async def update_profile(payload: ProfileUpdateIn, user: dict = Depends(get_curr
         "phone": (payload.phone or "").strip() or None,
         "currency": payload.currency or user.get("currency", "INR"),
     }
+    if user.get("google_sub") or user.get("allow_sso", False):
+        updates["allow_sso"] = True
+    elif payload.allow_sso is not None:
+        updates["allow_sso"] = payload.allow_sso
     await db.users.update_one({"id": user["id"]}, {"$set": updates})
     user.update(updates)
     return UserOut(**user)

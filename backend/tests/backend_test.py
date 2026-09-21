@@ -181,6 +181,26 @@ class TestProfileAndPhone:
         assert r.json()["currency"] == "USD"
         assert s.get(f"{API}/auth/me").json()["currency"] == "USD"
 
+    def test_profile_sso_permission_is_one_way(self, approved_partner):
+        s, _ = approved_partner
+        assert s.get(f"{API}/auth/me").json()["allow_sso"] is False
+
+        enabled = s.patch(f"{API}/auth/profile", json={
+            "name": "SSO User",
+            "phone": None,
+            "allow_sso": True,
+        })
+        assert enabled.status_code == 200
+        assert enabled.json()["allow_sso"] is True
+
+        disabled_attempt = s.patch(f"{API}/auth/profile", json={
+            "name": "SSO User",
+            "phone": None,
+            "allow_sso": False,
+        })
+        assert disabled_attempt.status_code == 200
+        assert disabled_attempt.json()["allow_sso"] is True
+
     def test_phone_flows_via_register_me_admin_list(self, admin):
         email = f"phone_user_{uuid.uuid4().hex[:8]}@test.com"
         phone = "+918888888888"
